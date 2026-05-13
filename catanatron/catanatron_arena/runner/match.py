@@ -29,6 +29,7 @@ class MatchConfig:
     number_placement: NumberPlacement = "official_spiral"
     seed: int | None = None
     vps_to_win: int = 10
+    max_turns: int = TURNS_LIMIT
     max_decisions: int = TURNS_LIMIT * 20
     default_invalid_retries: int = 3
     write_observations: bool = True
@@ -72,12 +73,14 @@ def run_match(
             "map_type": config.map_type,
             "number_placement": config.number_placement,
             "vps_to_win": config.vps_to_win,
+            "max_turns": config.max_turns,
+            "max_decisions": config.max_decisions,
             "agents": [agent.name for agent in agents],
         },
     )
 
     decision_index = 0
-    while game.winning_color() is None and game.state.num_turns < TURNS_LIMIT:
+    while game.winning_color() is None and game.state.num_turns < config.max_turns:
         if decision_index >= config.max_decisions:
             break
 

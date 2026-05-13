@@ -94,6 +94,26 @@ def test_compact_match_skips_observation_files(tmp_path):
     assert not list(result.replay_path.parent.glob("observations/*.json"))
 
 
+def test_match_records_configured_turn_limit(tmp_path):
+    agents = [build_local_agent("first_action") for _ in range(4)]
+
+    result = run_match(
+        agents,
+        tmp_path,
+        MatchConfig(
+            seed=7,
+            map_type="MINI",
+            max_turns=5,
+            max_decisions=100,
+            write_observations=False,
+        ),
+    )
+
+    replay = json.loads(result.replay_path.read_text(encoding="utf-8"))
+    assert result.turns == 5
+    assert replay["config"]["max_turns"] == 5
+
+
 class InvalidAgent:
     name = "invalid"
     max_invalid_retries = 0

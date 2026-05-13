@@ -21,6 +21,8 @@ def main():
 @click.option("--map-type", default="BASE", show_default=True, type=click.Choice(["BASE", "MINI", "TOURNAMENT"]))
 @click.option("--seed", default=1, show_default=True, type=int)
 @click.option("--vps-to-win", default=10, show_default=True, type=int)
+@click.option("--max-turns", default=1000, show_default=True, type=int)
+@click.option("--max-decisions", default=20000, show_default=True, type=int)
 @click.option(
     "--observations/--compact",
     default=True,
@@ -34,6 +36,8 @@ def run(
     map_type: str,
     seed: int,
     vps_to_win: int,
+    max_turns: int,
+    max_decisions: int,
     observations: bool,
 ):
     """Run local arena matches."""
@@ -54,6 +58,8 @@ def run(
                 seed=game_seed,
                 map_type=map_type,
                 vps_to_win=vps_to_win,
+                max_turns=max_turns,
+                max_decisions=max_decisions,
                 write_observations=observations,
             ),
         )
