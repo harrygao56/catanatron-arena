@@ -92,18 +92,39 @@ def rank(run_dir: Path):
 
     wins: dict[str, int] = {}
     total_vp: dict[str, int] = {}
+    agent_games: dict[str, int] = {}
+    agent_wins: dict[str, int] = {}
+    agent_total_vp: dict[str, int] = {}
     games = 0
     for replay_path in replays:
         replay = json.loads(replay_path.read_text(encoding="utf-8"))
         games += 1
         winner = replay["final"]["winner"]
+        agent_by_color = replay["config"].get("agent_by_color", {})
         if winner is not None:
             wins[winner] = wins.get(winner, 0) + 1
+            winner_agent = agent_by_color.get(winner)
+            if winner_agent is not None:
+                agent_wins[winner_agent] = agent_wins.get(winner_agent, 0) + 1
         for color, points in replay["final"]["victory_points"].items():
             total_vp[color] = total_vp.get(color, 0) + points
+            agent = agent_by_color.get(color)
+            if agent is not None:
+                agent_games[agent] = agent_games.get(agent, 0) + 1
+                agent_total_vp[agent] = agent_total_vp.get(agent, 0) + points
 
     click.echo(f"games: {games}")
+    click.echo("by color:")
     for color in sorted(total_vp):
         win_rate = wins.get(color, 0) / games
         avg_vp = total_vp[color] / games
         click.echo(f"{color}: wins={wins.get(color, 0)} win_rate={win_rate:.3f} avg_vp={avg_vp:.2f}")
+    if agent_games:
+        click.echo("by agent:")
+        for agent in sorted(agent_games):
+            win_rate = agent_wins.get(agent, 0) / agent_games[agent]
+            avg_vp = agent_total_vp[agent] / agent_games[agent]
+            click.echo(
+                f"{agent}: seats={agent_games[agent]} wins={agent_wins.get(agent, 0)} "
+                f"win_rate={win_rate:.3f} avg_vp={avg_vp:.2f}"
+            )

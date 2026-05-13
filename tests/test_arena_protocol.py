@@ -71,6 +71,7 @@ def test_local_match_writes_replay(tmp_path):
     replay = json.loads(result.replay_path.read_text(encoding="utf-8"))
     assert replay["decisions"]
     assert replay["final"]["num_decisions"] == result.decisions
+    assert replay["config"]["agent_by_color"]
 
 
 def test_compact_match_skips_observation_files(tmp_path):
@@ -140,3 +141,32 @@ def test_invalid_local_agent_fails_match(tmp_path):
         decision["status"] == "invalid_action_failed"
         for decision in replay["decisions"]
     )
+
+
+def test_catanatron_baseline_uses_action_protocol(tmp_path):
+    agents = [build_local_agent("weighted_random") for _ in range(4)]
+
+    result = run_match(
+        agents,
+        tmp_path,
+        MatchConfig(
+            seed=7,
+            map_type="MINI",
+            vps_to_win=3,
+            max_turns=200,
+            max_decisions=1000,
+            write_observations=False,
+        ),
+    )
+
+    replay = json.loads(result.replay_path.read_text(encoding="utf-8"))
+    assert replay["decisions"]
+    assert replay["decisions"][0]["mapped_action"]["type"]
+
+
+def test_parameterized_catanatron_baselines_build():
+    assert build_local_agent("mcts:2").name == "mcts:2:0"
+    assert build_local_agent("mcts:2:1").name == "mcts:2:1"
+    assert build_local_agent("greedy:2").name == "greedy:2"
+    assert build_local_agent("ab:1").name == "ab:1:1"
+    assert build_local_agent("sab:1:0").name == "sab:1:0"

@@ -76,6 +76,9 @@ def run_match(
             "max_turns": config.max_turns,
             "max_decisions": config.max_decisions,
             "agents": [agent.name for agent in agents],
+            "agent_by_color": {
+                color.value: runtimes_by_color[color].name for color in colors
+            },
         },
     )
 
@@ -92,7 +95,10 @@ def run_match(
         attempts = []
         started = time.monotonic()
         for attempt_index in range(max_retries + 1):
-            selected = runtime.choose_action(observation)
+            if hasattr(runtime, "choose_action_from_game"):
+                selected = runtime.choose_action_from_game(game, config.map_type)
+            else:
+                selected = runtime.choose_action(observation)
             try:
                 action = validate_selected_action(game, selected.action_id, config.map_type)
                 status = "ok" if attempt_index == 0 else "ok_after_retry"
