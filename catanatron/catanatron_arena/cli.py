@@ -24,6 +24,11 @@ def main():
 @click.option("--max-turns", default=1000, show_default=True, type=int)
 @click.option("--max-decisions", default=20000, show_default=True, type=int)
 @click.option(
+    "--rotate-seats",
+    is_flag=True,
+    help="Rotate agent specs through color seats across games.",
+)
+@click.option(
     "--observations/--compact",
     default=True,
     show_default=True,
@@ -38,6 +43,7 @@ def run(
     vps_to_win: int,
     max_turns: int,
     max_decisions: int,
+    rotate_seats: bool,
     observations: bool,
 ):
     """Run local arena matches."""
@@ -47,9 +53,10 @@ def run(
 
     for game_index in range(games):
         game_seed = seed + game_index
+        game_specs = _rotate_specs(specs, game_index) if rotate_seats else specs
         runtimes = [
             build_local_agent(spec, seed=game_seed + agent_index)
-            for agent_index, spec in enumerate(specs)
+            for agent_index, spec in enumerate(game_specs)
         ]
         result = run_match(
             runtimes,
@@ -69,12 +76,14 @@ def run(
                 "winner": result.winner,
                 "turns": result.turns,
                 "decisions": result.decisions,
+                "agents": game_specs,
                 "replay_path": str(result.replay_path),
             }
         )
         click.echo(
             f"{game_index + 1}/{games} game={result.game_id} winner={result.winner} "
-            f"turns={result.turns} decisions={result.decisions} failed={result.failed}"
+            f"turns={result.turns} decisions={result.decisions} failed={result.failed} "
+            f"agents={','.join(game_specs)}"
         )
 
     summary_path = output_dir / "summary.json"
@@ -128,3 +137,10 @@ def rank(run_dir: Path):
                 f"{agent}: seats={agent_games[agent]} wins={agent_wins.get(agent, 0)} "
                 f"win_rate={win_rate:.3f} avg_vp={avg_vp:.2f}"
             )
+
+
+def _rotate_specs(specs: list[str], offset: int) -> list[str]:
+    if not specs:
+        return specs
+    offset = offset % len(specs)
+    return specs[offset:] + specs[:offset]

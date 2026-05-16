@@ -5,6 +5,7 @@ from catanatron.models.map import build_map
 from catanatron.models.player import Color, Player
 
 from catanatron_arena.agents.local import build_local_agent
+from catanatron_arena.cli import _rotate_specs
 from catanatron_arena.protocol.actions import (
     InvalidActionSelection,
     legal_action_json,
@@ -170,3 +171,10 @@ def test_parameterized_catanatron_baselines_build():
     assert build_local_agent("greedy:2").name == "greedy:2"
     assert build_local_agent("ab:1").name == "ab:1:1"
     assert build_local_agent("sab:1:0").name == "sab:1:0"
+
+
+def test_rotate_specs():
+    specs = ["a", "b", "c", "d"]
+    assert _rotate_specs(specs, 0) == ["a", "b", "c", "d"]
+    assert _rotate_specs(specs, 1) == ["b", "c", "d", "a"]
+    assert _rotate_specs(specs, 4) == ["a", "b", "c", "d"]
