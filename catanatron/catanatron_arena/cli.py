@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 import click
 
+import catanatron_arena
 from catanatron_arena.agents.local import build_local_agent
 from catanatron_arena.runner.match import MatchConfig, run_match
 
@@ -50,6 +53,7 @@ def run(
     output_dir.mkdir(parents=True, exist_ok=True)
     specs = [item.strip() for item in agents.split(",") if item.strip()]
     results = []
+    started_at = _utc_now()
 
     for game_index in range(games):
         game_seed = seed + game_index
@@ -76,6 +80,8 @@ def run(
                 "winner": result.winner,
                 "turns": result.turns,
                 "decisions": result.decisions,
+                "failed": result.failed,
+                "failure_reason": result.failure_reason,
                 "agents": game_specs,
                 "replay_path": str(result.replay_path),
             }
@@ -88,7 +94,25 @@ def run(
 
     summary_path = output_dir / "summary.json"
     summary_path.write_text(json.dumps({"results": results}, indent=2, sort_keys=True), encoding="utf-8")
+    manifest_path = output_dir / "manifest.json"
+    manifest = _build_manifest(
+        agent_specs=specs,
+        games=games,
+        output_dir=output_dir,
+        map_type=map_type,
+        seed=seed,
+        vps_to_win=vps_to_win,
+        max_turns=max_turns,
+        max_decisions=max_decisions,
+        rotate_seats=rotate_seats,
+        write_observations=observations,
+        started_at=started_at,
+        finished_at=_utc_now(),
+        results=results,
+    )
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
     click.echo(f"Wrote {summary_path}")
+    click.echo(f"Wrote {manifest_path}")
 
 
 @main.command()
@@ -144,3 +168,67 @@ def _rotate_specs(specs: list[str], offset: int) -> list[str]:
         return specs
     offset = offset % len(specs)
     return specs[offset:] + specs[:offset]
+
+
+def _build_manifest(
+    agent_specs: list[str],
+    games: int,
+    output_dir: Path,
+    map_type: str,
+    seed: int,
+    vps_to_win: int,
+    max_turns: int,
+    max_decisions: int,
+    rotate_seats: bool,
+    write_observations: bool,
+    started_at: str,
+    finished_at: str,
+    results: list[dict],
+) -> dict:
+    failed = sum(1 for result in results if result.get("failed"))
+    unfinished = sum(
+        1
+        for result in results
+        if result.get("winner") is None and not result.get("failed")
+    )
+    return {
+        "schema_version": 1,
+        "arena_version": catanatron_arena.__version__,
+        "git_commit": _git_commit(),
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "output_dir": str(output_dir),
+        "config": {
+            "agent_specs": agent_specs,
+            "games": games,
+            "map_type": map_type,
+            "seed": seed,
+            "vps_to_win": vps_to_win,
+            "max_turns": max_turns,
+            "max_decisions": max_decisions,
+            "rotate_seats": rotate_seats,
+            "write_observations": write_observations,
+        },
+        "results": {
+            "games_completed": len(results),
+            "failed": failed,
+            "unfinished": unfinished,
+        },
+    }
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _git_commit() -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return result.stdout.strip()

@@ -5,7 +5,7 @@ from catanatron.models.map import build_map
 from catanatron.models.player import Color, Player
 
 from catanatron_arena.agents.local import build_local_agent
-from catanatron_arena.cli import _rotate_specs
+from catanatron_arena.cli import _build_manifest, _rotate_specs
 from catanatron_arena.protocol.actions import (
     InvalidActionSelection,
     legal_action_json,
@@ -178,3 +178,30 @@ def test_rotate_specs():
     assert _rotate_specs(specs, 0) == ["a", "b", "c", "d"]
     assert _rotate_specs(specs, 1) == ["b", "c", "d", "a"]
     assert _rotate_specs(specs, 4) == ["a", "b", "c", "d"]
+
+
+def test_build_manifest_counts_results(tmp_path):
+    manifest = _build_manifest(
+        agent_specs=["ab:1", "random"],
+        games=3,
+        output_dir=tmp_path,
+        map_type="BASE",
+        seed=10,
+        vps_to_win=10,
+        max_turns=100,
+        max_decisions=500,
+        rotate_seats=True,
+        write_observations=False,
+        started_at="2026-01-01T00:00:00+00:00",
+        finished_at="2026-01-01T00:00:01+00:00",
+        results=[
+            {"winner": "RED", "failed": False},
+            {"winner": None, "failed": False},
+            {"winner": None, "failed": True},
+        ],
+    )
+
+    assert manifest["config"]["rotate_seats"]
+    assert manifest["results"]["games_completed"] == 3
+    assert manifest["results"]["unfinished"] == 1
+    assert manifest["results"]["failed"] == 1
