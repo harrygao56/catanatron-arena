@@ -137,7 +137,7 @@ Per decision, arena writes:
 ```text
 /workspace/current_observation.json
 /workspace/legal_actions.json
-/workspace/current_decision.json
+/workspace/decision_meta.json
 /workspace/observations/turn_000042.json
 ```
 
@@ -157,7 +157,7 @@ Pi accepts the prompt with a response event, then streams agent/tool events. The
 
 Use a Pi TypeScript extension to register `choose_action`.
 
-The extension should read `/workspace/current_decision.json` to find the decision/attempt/output path, then write:
+The extension should read `/workspace/decision_meta.json` (host-written metadata for this decision) to find the decision/attempt/output path, then write:
 
 ```text
 /workspace/outputs/turn_000042_attempt_001.json

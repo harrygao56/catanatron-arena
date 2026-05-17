@@ -76,7 +76,7 @@ def test_write_decision_files_writes_all_four_files(tmp_path):
 
     current = json.loads((ws.root / "current_observation.json").read_text(encoding="utf-8"))
     legal = json.loads((ws.root / "legal_actions.json").read_text(encoding="utf-8"))
-    decision = json.loads((ws.root / "current_decision.json").read_text(encoding="utf-8"))
+    decision = json.loads((ws.root / "decision_meta.json").read_text(encoding="utf-8"))
     historical = json.loads(
         (ws.root / "observations" / "turn_000007.json").read_text(encoding="utf-8")
     )
@@ -112,7 +112,7 @@ def test_write_decision_files_honors_custom_container_root(tmp_path):
     )
     ws.write_decision_files({"decision_index": 0, "legal_actions": []}, attempt=1)
 
-    decision = json.loads((ws.root / "current_decision.json").read_text(encoding="utf-8"))
+    decision = json.loads((ws.root / "decision_meta.json").read_text(encoding="utf-8"))
     assert decision["output_path"] == "/mnt/agent/outputs/turn_000000_attempt_001.json"
 
 
@@ -151,7 +151,7 @@ def test_default_pi_extension_is_shipped_with_runtime():
     assert "rationale:" in source
     assert "terminate: true" in source
     # File bridge: reads the per-decision metadata to learn where to write.
-    assert "current_decision.json" in source
+    assert "decision_meta.json" in source
     assert "writeFile(outputPath" in source
 
 

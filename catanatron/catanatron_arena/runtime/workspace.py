@@ -12,7 +12,7 @@ Layout::
       AGENTS.md
       current_observation.json        # rewritten each decision
       legal_actions.json              # rewritten each decision
-      current_decision.json           # rewritten each decision
+      decision_meta.json              # rewritten each decision
       observations/
         turn_000000.json              # historical record per decision
       outputs/
@@ -44,9 +44,11 @@ For each decision the host writes the following files inside this workspace
 
 - `current_observation.json` — your player-view of the game state.
 - `legal_actions.json` — the list of legal actions you may choose from.
-- `current_decision.json` — metadata: `decision_index`, `attempt`,
-  `seat_color`, and the absolute container path of the file the
-  `choose_action` tool should write to (`output_path`).
+- `decision_meta.json` — metadata about this decision: `decision_index`,
+  `attempt`, `seat_color`, and the absolute container path of the file the
+  `choose_action` tool should write to (`output_path`). This file is host
+  input, not your output — your answer goes in `output_path` via
+  `choose_action`.
 
 You must respond by calling the `choose_action` tool with:
 
@@ -102,7 +104,7 @@ class SeatWorkspace:
         _write_json(self.root / "current_observation.json", observation)
         _write_json(self.root / "legal_actions.json", legal_actions)
         _write_json(
-            self.root / "current_decision.json",
+            self.root / "decision_meta.json",
             {
                 "decision_index": decision_index,
                 "attempt": attempt,

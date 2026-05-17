@@ -7,13 +7,14 @@
 // before each Pi prompt):
 //   current_observation.json  player-view observation
 //   legal_actions.json        list of {id, type, value, label}
-//   current_decision.json     {decision_index, attempt, seat_color, output_path}
+//   decision_meta.json        {decision_index, attempt, seat_color, output_path}
 //
-// The tool reads `current_decision.json` to learn the container-absolute
-// `output_path` it should write to, then writes `{action_id, rationale}` to
-// that path and signals `terminate: true` so the agent loop ends after this
-// single tool call. The host then reads the output file, validates the
-// `action_id` against the engine's legal actions, and applies the move.
+// `decision_meta.json` is host input (not the tool's output). The tool reads
+// it to learn the container-absolute `output_path` to write to, then writes
+// `{action_id, rationale}` to that path and signals `terminate: true` so the
+// agent loop ends after this single tool call. The host then reads the
+// output file, validates the `action_id` against the engine's legal actions,
+// and applies the move.
 //
 // The workspace root inside the container is `/workspace` by default. Set
 // the env var `CATANATRON_ARENA_WORKSPACE_ROOT` to override (e.g. when the
@@ -25,9 +26,9 @@ import { readFile, writeFile } from "node:fs/promises";
 
 const WORKSPACE_ROOT =
   process.env.CATANATRON_ARENA_WORKSPACE_ROOT ?? "/workspace";
-const CURRENT_DECISION_FILE = `${WORKSPACE_ROOT}/current_decision.json`;
+const DECISION_META_FILE = `${WORKSPACE_ROOT}/decision_meta.json`;
 
-interface CurrentDecision {
+interface DecisionMeta {
   decision_index?: number;
   attempt?: number;
   seat_color?: string;
@@ -66,21 +67,21 @@ export default function (pi: ExtensionAPI) {
     async execute(_toolCallId, params) {
       let raw: string;
       try {
-        raw = await readFile(CURRENT_DECISION_FILE, "utf8");
+        raw = await readFile(DECISION_META_FILE, "utf8");
       } catch (err) {
         throw new Error(
-          `choose_action: failed to read ${CURRENT_DECISION_FILE}: ${
+          `choose_action: failed to read ${DECISION_META_FILE}: ${
             (err as Error).message
           }`,
         );
       }
 
-      let decision: CurrentDecision;
+      let decision: DecisionMeta;
       try {
-        decision = JSON.parse(raw) as CurrentDecision;
+        decision = JSON.parse(raw) as DecisionMeta;
       } catch (err) {
         throw new Error(
-          `choose_action: ${CURRENT_DECISION_FILE} is not valid JSON: ${
+          `choose_action: ${DECISION_META_FILE} is not valid JSON: ${
             (err as Error).message
           }`,
         );
@@ -89,7 +90,7 @@ export default function (pi: ExtensionAPI) {
       const outputPath = decision.output_path;
       if (typeof outputPath !== "string" || outputPath.length === 0) {
         throw new Error(
-          `choose_action: ${CURRENT_DECISION_FILE} is missing 'output_path'`,
+          `choose_action: ${DECISION_META_FILE} is missing 'output_path'`,
         );
       }
 
