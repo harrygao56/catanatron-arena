@@ -1,11 +1,5 @@
 """Per-seat per-game workspace layout for sandboxed model agents.
 
-Each seat in an arena match gets its own workspace directory that is mounted
-into a Docker container for the lifetime of one game. The host writes
-per-decision observation files into the workspace; the agent's tool extension
-writes attempt outputs back into the same directory. After the game the
-workspace is destroyed (or archived for debugging).
-
 Layout::
 
     <root>/
@@ -76,20 +70,14 @@ ends. There is no cross-game memory. You may create scratch files (notes,
 
 @dataclass(frozen=True)
 class SeatWorkspace:
-    """One seat's per-game workspace.
-
-    Held by the host. Bind-mounted into the agent's container at
-    `container_root`.
-    """
-
     color: str
     root: Path
     container_root: str = "/workspace"
 
     def write_decision_files(self, observation: dict, attempt: int) -> Path:
-        """Write the four per-decision files the agent reads. Returns the host
-        path of the file the agent's tool extension is expected to write back.
-        The `output_path` exposed to the agent is a container-absolute path.
+        """Write per-decision files; return the host path the agent must write back to.
+
+        `output_path` exposed to the agent is a container-absolute path.
         """
         decision_index = observation["decision_index"]
         legal_actions = observation.get("legal_actions", [])
@@ -124,9 +112,7 @@ def create_seat_workspace(
 ) -> SeatWorkspace:
     """Create a fresh workspace for one seat in one game.
 
-    Fails if `root` already exists, to make the per-game lifetime explicit.
-    `container_root` is the path the workspace is bind-mounted to inside the
-    agent's container; it is used when writing agent-facing path references.
+    Fails if `root` already exists, to keep the per-game lifetime explicit.
     """
     root.mkdir(parents=True, exist_ok=False)
     (root / "observations").mkdir()

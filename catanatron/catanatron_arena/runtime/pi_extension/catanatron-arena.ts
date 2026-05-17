@@ -1,24 +1,5 @@
-// Catanatron Arena Pi extension.
-//
-// Registers a single tool, `choose_action`, that the model agent calls once
-// per decision to submit a chosen action back to the arena host.
-//
-// Per-decision protocol (host side writes these files into the workspace
-// before each Pi prompt):
-//   current_observation.json  player-view observation
-//   legal_actions.json        list of {id, type, value, label}
-//   decision_meta.json        {decision_index, attempt, seat_color, output_path}
-//
-// `decision_meta.json` is host input (not the tool's output). The tool reads
-// it to learn the container-absolute `output_path` to write to, then writes
-// `{action_id, rationale}` to that path and signals `terminate: true` so the
-// agent loop ends after this single tool call. The host then reads the
-// output file, validates the `action_id` against the engine's legal actions,
-// and applies the move.
-//
-// The workspace root inside the container is `/workspace` by default. Set
-// the env var `CATANATRON_ARENA_WORKSPACE_ROOT` to override (e.g. when the
-// host bind-mounts elsewhere).
+// Catanatron Arena Pi extension. Registers `choose_action`; protocol in AGENTS.md.
+// Workspace root defaults to `/workspace`; override via CATANATRON_ARENA_WORKSPACE_ROOT.
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
