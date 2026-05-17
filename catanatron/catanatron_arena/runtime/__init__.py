@@ -2,6 +2,13 @@
 
 from pathlib import Path
 
+from catanatron_arena.runtime.decisions import (
+    PIPE_CLOSED,
+    DecisionOutcome,
+    DecisionStatus,
+    PiEventReader,
+    await_decision_output,
+)
 from catanatron_arena.runtime.docker import (
     BindMount,
     ContainerSpec,
@@ -22,12 +29,17 @@ DEFAULT_PI_EXTENSION_PATH = Path(__file__).parent / "pi_extension" / "catanatron
 
 __all__ = [
     "DEFAULT_PI_EXTENSION_PATH",
+    "PIPE_CLOSED",
     "BindMount",
     "ContainerSpec",
+    "DecisionOutcome",
+    "DecisionStatus",
     "DockerRuntime",
     "EnvVar",
+    "PiEventReader",
     "PiRpcClient",
     "SeatWorkspace",
+    "await_decision_output",
     "build_exec_argv",
     "build_run_argv",
     "create_seat_workspace",
