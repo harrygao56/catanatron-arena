@@ -163,6 +163,35 @@ def test_build_pi_agent_requires_provider_and_model():
         build_pi_agent("pi:anthropic/")
 
 
+def test_cli_build_agent_prefers_named_config_over_inline():
+    from catanatron_arena.cli import _build_agent
+    from catanatron_arena.agents.docker_pi import DockerPiAgentConfig
+
+    named = DockerPiAgentConfig(
+        provider="anthropic", model="claude-opus-4-5", image="custom:1",
+        name="pi:opus-fast",
+    )
+    agent = _build_agent("pi:opus-fast", seed=0, pi_configs={"opus-fast": named})
+
+    assert agent.config.image == "custom:1"
+    assert agent.name == "pi:opus-fast"
+
+
+def test_cli_build_agent_falls_back_to_inline_when_name_unknown():
+    from catanatron_arena.cli import _build_agent
+
+    agent = _build_agent("pi:anthropic/claude-opus-4-5", seed=0, pi_configs={})
+    assert agent.config.provider == "anthropic"
+    assert agent.config.model == "claude-opus-4-5"
+
+
+def test_cli_build_agent_dispatches_local_specs_unchanged():
+    from catanatron_arena.cli import _build_agent
+
+    agent = _build_agent("first_action", seed=0, pi_configs={})
+    assert agent.name == "first_action"
+
+
 # --- Lifecycle ---
 
 

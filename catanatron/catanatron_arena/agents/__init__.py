@@ -1,5 +1,6 @@
 """Agent runtime implementations."""
 
+from catanatron_arena.agents.config import load_pi_agents_config
 from catanatron_arena.agents.docker_pi import (
     DEFAULT_ENV_PASSTHROUGH,
     DEFAULT_IMAGE,
@@ -16,4 +17,5 @@ __all__ = [
     "DockerPiAgentConfig",
     "build_local_agent",
     "build_pi_agent",
+    "load_pi_agents_config",
 ]
