@@ -87,8 +87,27 @@ def test_write_decision_files_writes_all_four_files(tmp_path):
         "decision_index": 7,
         "attempt": 1,
         "seat_color": "RED",
-        "output_path": str(output_path),
+        "output_path": "/workspace/outputs/turn_000007_attempt_001.json",
     }
+
+
+def test_write_decision_files_uses_custom_container_root(tmp_path):
+    ws = create_seat_workspace(
+        tmp_path / "RED",
+        color="RED",
+        container_root="/mnt/agent",
+    )
+    ws.write_decision_files({"decision_index": 0, "legal_actions": []}, attempt=1)
+
+    decision = json.loads(ws.current_decision_path.read_text(encoding="utf-8"))
+    assert decision["output_path"] == "/mnt/agent/outputs/turn_000000_attempt_001.json"
+
+
+def test_container_path_translates_host_paths(tmp_path):
+    ws = create_seat_workspace(tmp_path / "RED", color="RED")
+
+    assert ws.container_path(ws.current_observation_path) == "/workspace/current_observation.json"
+    assert ws.container_path(ws.observation_path(3)) == "/workspace/observations/turn_000003.json"
 
 
 def test_write_decision_files_overwrites_current_files_across_turns(tmp_path):

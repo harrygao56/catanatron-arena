@@ -39,12 +39,14 @@ container and choose one legal action per decision.
 
 ## Per-decision protocol
 
-For each decision the host writes:
+For each decision the host writes the following files inside this workspace
+(your working directory inside the container):
 
 - `current_observation.json` — your player-view of the game state.
 - `legal_actions.json` — the list of legal actions you may choose from.
 - `current_decision.json` — metadata: `decision_index`, `attempt`,
-  `output_path`, and your `seat_color`.
+  `seat_color`, and the absolute container path of the file the
+  `choose_action` tool should write to (`output_path`).
 
 You must respond by calling the `choose_action` tool with:
 
@@ -76,6 +78,12 @@ class SeatWorkspace:
 
     color: str
     root: Path
+    container_root: str = "/workspace"
+
+    def container_path(self, host_path: Path) -> str:
+        """Translate a host path inside this workspace to its in-container path."""
+        relative = host_path.relative_to(self.root).as_posix()
+        return f"{self.container_root.rstrip('/')}/{relative}"
 
     @property
     def agents_md_path(self) -> Path:
@@ -124,10 +132,14 @@ class SeatWorkspace:
         observation: dict,
         attempt: int,
     ) -> Path:
-        """Write the four per-decision files. Returns the output path the agent must use."""
+        """Write the four per-decision files. Returns the host path of the
+        expected output file. Paths exposed to the agent in
+        `current_decision.json` are container paths (e.g. `/workspace/...`)
+        so the agent never sees host-side filesystem locations.
+        """
         decision_index = observation["decision_index"]
         legal_actions = observation.get("legal_actions", [])
-        output_path = self.output_path(decision_index, attempt)
+        host_output_path = self.output_path(decision_index, attempt)
 
         _write_json(self.observation_path(decision_index), observation)
         _write_json(self.current_observation_path, observation)
@@ -138,10 +150,10 @@ class SeatWorkspace:
                 "decision_index": decision_index,
                 "attempt": attempt,
                 "seat_color": self.color,
-                "output_path": str(output_path),
+                "output_path": self.container_path(host_output_path),
             },
         )
-        return output_path
+        return host_output_path
 
     def read_attempt_output(self, decision_index: int, attempt: int) -> dict:
         """Read and parse the agent's output file for a given decision/attempt."""
@@ -154,13 +166,16 @@ def create_seat_workspace(
     color: str,
     agents_md: str | None = None,
     pi_extension_path: Path | None = None,
+    container_root: str = "/workspace",
 ) -> SeatWorkspace:
     """Create a fresh workspace for one seat in one game.
 
     Fails if `root` already exists, to make the per-game lifetime explicit.
+    `container_root` is the path the workspace is bind-mounted to inside the
+    agent's container; it is used when writing agent-facing path references.
     """
     root.mkdir(parents=True, exist_ok=False)
-    ws = SeatWorkspace(color=color, root=root)
+    ws = SeatWorkspace(color=color, root=root, container_root=container_root)
     ws.observations_dir.mkdir()
     ws.outputs_dir.mkdir()
     ws.pi_sessions_dir.mkdir(parents=True)
