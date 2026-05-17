@@ -3,6 +3,7 @@ import json
 import pytest
 
 from catanatron_arena.runtime import (
+    DEFAULT_PI_EXTENSION_PATH,
     SeatWorkspace,
     create_seat_workspace,
     destroy_seat_workspace,
@@ -137,3 +138,32 @@ def test_destroy_seat_workspace_archives_when_requested(tmp_path):
 def test_destroy_seat_workspace_is_idempotent(tmp_path):
     ws = SeatWorkspace(color="RED", root=tmp_path / "missing")
     destroy_seat_workspace(ws)  # no raise
+
+
+def test_default_pi_extension_is_shipped_with_runtime():
+    assert DEFAULT_PI_EXTENSION_PATH.is_file()
+    assert DEFAULT_PI_EXTENSION_PATH.name == "catanatron-arena.ts"
+
+    source = DEFAULT_PI_EXTENSION_PATH.read_text(encoding="utf-8")
+    # Tool wiring: name, schema fields, and termination signal.
+    assert 'name: "choose_action"' in source
+    assert "action_id:" in source
+    assert "rationale:" in source
+    assert "terminate: true" in source
+    # File bridge: reads the per-decision metadata to learn where to write.
+    assert "current_decision.json" in source
+    assert "writeFile(outputPath" in source
+
+
+def test_default_pi_extension_installs_into_workspace(tmp_path):
+    ws = create_seat_workspace(
+        tmp_path / "RED",
+        color="RED",
+        pi_extension_path=DEFAULT_PI_EXTENSION_PATH,
+    )
+
+    installed = ws.root / ".pi" / "extensions" / "catanatron-arena.ts"
+    assert installed.is_file()
+    assert installed.read_text(encoding="utf-8") == DEFAULT_PI_EXTENSION_PATH.read_text(
+        encoding="utf-8"
+    )
