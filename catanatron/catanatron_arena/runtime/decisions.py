@@ -18,7 +18,15 @@ from typing import Callable, Literal
 from catanatron_arena.runtime.pi_rpc import PiRpcClient
 
 
-PIPE_CLOSED: object = object()
+class _PipeClosedSentinel:
+    def __repr__(self) -> str:
+        return "PIPE_CLOSED"
+
+
+PIPE_CLOSED = _PipeClosedSentinel()
+
+
+PullEvent = Callable[[float], "dict | None | _PipeClosedSentinel"]
 
 
 DecisionStatus = Literal[
@@ -49,7 +57,7 @@ def _try_read_output(path: Path) -> dict | None:
 def await_decision_output(
     output_path: Path,
     *,
-    pull_event: Callable[[float], object],
+    pull_event: PullEvent,
     timeout: float,
     poll_interval: float = 0.05,
     clock: Callable[[], float] = time.monotonic,
@@ -93,7 +101,7 @@ def await_decision_output(
 
         item = pull_event(min(poll_interval, remaining))
 
-        if item is PIPE_CLOSED:
+        if isinstance(item, _PipeClosedSentinel):
             # Last-shot file check: extension may have flushed just as Pi closed.
             output = _try_read_output(output_path)
             if output is not None:
@@ -109,8 +117,9 @@ def await_decision_output(
         if item is None:
             continue
 
-        events.append(item)  # type: ignore[arg-type]
-        if isinstance(item, dict) and item.get("type") == "agent_end":
+        # item is dict by elimination.
+        events.append(item)
+        if item.get("type") == "agent_end":
             saw_agent_end = True
 
 
@@ -122,7 +131,7 @@ class PiEventReader:
 
     def __init__(self, pi: PiRpcClient):
         self._pi = pi
-        self._queue: Queue = Queue()
+        self._queue: Queue[dict | _PipeClosedSentinel] = Queue()
         self._thread = threading.Thread(target=self._run, daemon=True, name="pi-rpc-reader")
         self._thread.start()
 
@@ -135,7 +144,7 @@ class PiEventReader:
         finally:
             self._queue.put(PIPE_CLOSED)
 
-    def pull(self, timeout: float) -> object:
+    def pull(self, timeout: float) -> dict | None | _PipeClosedSentinel:
         try:
             return self._queue.get(timeout=timeout)
         except Empty:
