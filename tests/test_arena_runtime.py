@@ -15,12 +15,12 @@ def test_create_seat_workspace_lays_out_expected_structure(tmp_path):
 
     assert isinstance(ws, SeatWorkspace)
     assert ws.color == "RED"
-    assert ws.observations_dir.is_dir()
-    assert ws.outputs_dir.is_dir()
-    assert ws.pi_sessions_dir.is_dir()
-    assert ws.pi_extensions_dir.is_dir()
-    assert ws.agents_md_path.is_file()
-    assert ws.agents_md_path.read_text(encoding="utf-8") == DEFAULT_AGENTS_MD
+    assert ws.container_root == "/workspace"
+    assert (ws.root / "observations").is_dir()
+    assert (ws.root / "outputs").is_dir()
+    assert (ws.root / ".pi" / "sessions").is_dir()
+    assert (ws.root / ".pi" / "extensions").is_dir()
+    assert (ws.root / "AGENTS.md").read_text(encoding="utf-8") == DEFAULT_AGENTS_MD
     # Per the plan: do not pre-create memory.md; the agent may create it.
     assert not (ws.root / "memory.md").exists()
 
@@ -31,7 +31,7 @@ def test_create_seat_workspace_accepts_custom_agents_md(tmp_path):
         color="BLUE",
         agents_md="custom instructions",
     )
-    assert ws.agents_md_path.read_text(encoding="utf-8") == "custom instructions"
+    assert (ws.root / "AGENTS.md").read_text(encoding="utf-8") == "custom instructions"
 
 
 def test_create_seat_workspace_copies_pi_extension(tmp_path):
@@ -45,8 +45,7 @@ def test_create_seat_workspace_copies_pi_extension(tmp_path):
         pi_extension_path=extension,
     )
 
-    copied = ws.pi_extensions_dir / "catanatron-arena.ts"
-    assert copied.is_file()
+    copied = ws.root / ".pi" / "extensions" / "catanatron-arena.ts"
     assert copied.read_text(encoding="utf-8") == "export const tool = {};"
 
 
@@ -70,15 +69,16 @@ def test_write_decision_files_writes_all_four_files(tmp_path):
         "features": {"P0_PUBLIC_VPS": 2},
     }
 
-    output_path = ws.write_decision_files(observation, attempt=1)
+    host_output_path = ws.write_decision_files(observation, attempt=1)
 
-    assert output_path == ws.output_path(7, 1)
-    assert output_path == ws.outputs_dir / "turn_000007_attempt_001.json"
+    assert host_output_path == ws.root / "outputs" / "turn_000007_attempt_001.json"
 
-    current = json.loads(ws.current_observation_path.read_text(encoding="utf-8"))
-    legal = json.loads(ws.legal_actions_path.read_text(encoding="utf-8"))
-    decision = json.loads(ws.current_decision_path.read_text(encoding="utf-8"))
-    historical = json.loads(ws.observation_path(7).read_text(encoding="utf-8"))
+    current = json.loads((ws.root / "current_observation.json").read_text(encoding="utf-8"))
+    legal = json.loads((ws.root / "legal_actions.json").read_text(encoding="utf-8"))
+    decision = json.loads((ws.root / "current_decision.json").read_text(encoding="utf-8"))
+    historical = json.loads(
+        (ws.root / "observations" / "turn_000007.json").read_text(encoding="utf-8")
+    )
 
     assert current == observation
     assert historical == observation
@@ -91,7 +91,19 @@ def test_write_decision_files_writes_all_four_files(tmp_path):
     }
 
 
-def test_write_decision_files_uses_custom_container_root(tmp_path):
+def test_write_decision_files_overwrites_current_files_across_turns(tmp_path):
+    ws = create_seat_workspace(tmp_path / "RED", color="RED")
+    ws.write_decision_files({"decision_index": 0, "legal_actions": [{"id": 1}]}, attempt=1)
+    ws.write_decision_files({"decision_index": 1, "legal_actions": [{"id": 2}]}, attempt=1)
+
+    current = json.loads((ws.root / "current_observation.json").read_text(encoding="utf-8"))
+    assert current["decision_index"] == 1
+    # Per-turn history is preserved for both decisions.
+    assert (ws.root / "observations" / "turn_000000.json").is_file()
+    assert (ws.root / "observations" / "turn_000001.json").is_file()
+
+
+def test_write_decision_files_honors_custom_container_root(tmp_path):
     ws = create_seat_workspace(
         tmp_path / "RED",
         color="RED",
@@ -99,46 +111,12 @@ def test_write_decision_files_uses_custom_container_root(tmp_path):
     )
     ws.write_decision_files({"decision_index": 0, "legal_actions": []}, attempt=1)
 
-    decision = json.loads(ws.current_decision_path.read_text(encoding="utf-8"))
+    decision = json.loads((ws.root / "current_decision.json").read_text(encoding="utf-8"))
     assert decision["output_path"] == "/mnt/agent/outputs/turn_000000_attempt_001.json"
-
-
-def test_container_path_translates_host_paths(tmp_path):
-    ws = create_seat_workspace(tmp_path / "RED", color="RED")
-
-    assert ws.container_path(ws.current_observation_path) == "/workspace/current_observation.json"
-    assert ws.container_path(ws.observation_path(3)) == "/workspace/observations/turn_000003.json"
-
-
-def test_write_decision_files_overwrites_current_files_across_turns(tmp_path):
-    ws = create_seat_workspace(tmp_path / "RED", color="RED")
-    obs_a = {"decision_index": 0, "legal_actions": [{"id": 1}]}
-    obs_b = {"decision_index": 1, "legal_actions": [{"id": 2}]}
-
-    ws.write_decision_files(obs_a, attempt=1)
-    ws.write_decision_files(obs_b, attempt=1)
-
-    current = json.loads(ws.current_observation_path.read_text(encoding="utf-8"))
-    assert current["decision_index"] == 1
-    # Per-turn history is preserved for both decisions.
-    assert ws.observation_path(0).is_file()
-    assert ws.observation_path(1).is_file()
-
-
-def test_read_attempt_output_parses_agent_file(tmp_path):
-    ws = create_seat_workspace(tmp_path / "RED", color="RED")
-    ws.write_decision_files({"decision_index": 3, "legal_actions": []}, attempt=2)
-    ws.output_path(3, 2).write_text(
-        json.dumps({"action_id": 42, "rationale": "go"}),
-        encoding="utf-8",
-    )
-
-    assert ws.read_attempt_output(3, 2) == {"action_id": 42, "rationale": "go"}
 
 
 def test_destroy_seat_workspace_removes_root(tmp_path):
     ws = create_seat_workspace(tmp_path / "RED", color="RED")
-    assert ws.root.exists()
 
     destroy_seat_workspace(ws)
 
@@ -153,11 +131,9 @@ def test_destroy_seat_workspace_archives_when_requested(tmp_path):
     destroy_seat_workspace(ws, archive_to=archive)
 
     assert not ws.root.exists()
-    assert archive.is_dir()
     assert (archive / "current_observation.json").is_file()
 
 
 def test_destroy_seat_workspace_is_idempotent(tmp_path):
     ws = SeatWorkspace(color="RED", root=tmp_path / "missing")
-    # Should not raise.
-    destroy_seat_workspace(ws)
+    destroy_seat_workspace(ws)  # no raise

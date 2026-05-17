@@ -74,91 +74,43 @@ ends. There is no cross-game memory. You may create scratch files (notes,
 
 @dataclass(frozen=True)
 class SeatWorkspace:
-    """Path layout for one seat's per-game workspace."""
+    """One seat's per-game workspace.
+
+    Held by the host. Bind-mounted into the agent's container at
+    `container_root`.
+    """
 
     color: str
     root: Path
     container_root: str = "/workspace"
 
-    def container_path(self, host_path: Path) -> str:
-        """Translate a host path inside this workspace to its in-container path."""
-        relative = host_path.relative_to(self.root).as_posix()
-        return f"{self.container_root.rstrip('/')}/{relative}"
-
-    @property
-    def agents_md_path(self) -> Path:
-        return self.root / "AGENTS.md"
-
-    @property
-    def observations_dir(self) -> Path:
-        return self.root / "observations"
-
-    @property
-    def outputs_dir(self) -> Path:
-        return self.root / "outputs"
-
-    @property
-    def pi_dir(self) -> Path:
-        return self.root / ".pi"
-
-    @property
-    def pi_sessions_dir(self) -> Path:
-        return self.pi_dir / "sessions"
-
-    @property
-    def pi_extensions_dir(self) -> Path:
-        return self.pi_dir / "extensions"
-
-    @property
-    def current_observation_path(self) -> Path:
-        return self.root / "current_observation.json"
-
-    @property
-    def legal_actions_path(self) -> Path:
-        return self.root / "legal_actions.json"
-
-    @property
-    def current_decision_path(self) -> Path:
-        return self.root / "current_decision.json"
-
-    def observation_path(self, decision_index: int) -> Path:
-        return self.observations_dir / f"turn_{decision_index:06d}.json"
-
-    def output_path(self, decision_index: int, attempt: int) -> Path:
-        return self.outputs_dir / f"turn_{decision_index:06d}_attempt_{attempt:03d}.json"
-
-    def write_decision_files(
-        self,
-        observation: dict,
-        attempt: int,
-    ) -> Path:
-        """Write the four per-decision files. Returns the host path of the
-        expected output file. Paths exposed to the agent in
-        `current_decision.json` are container paths (e.g. `/workspace/...`)
-        so the agent never sees host-side filesystem locations.
+    def write_decision_files(self, observation: dict, attempt: int) -> Path:
+        """Write the four per-decision files the agent reads. Returns the host
+        path of the file the agent's tool extension is expected to write back.
+        The `output_path` exposed to the agent is a container-absolute path.
         """
         decision_index = observation["decision_index"]
         legal_actions = observation.get("legal_actions", [])
-        host_output_path = self.output_path(decision_index, attempt)
+        host_output_path = (
+            self.root / "outputs" / f"turn_{decision_index:06d}_attempt_{attempt:03d}.json"
+        )
+        container_output_path = (
+            f"{self.container_root.rstrip('/')}/outputs/{host_output_path.name}"
+        )
 
-        _write_json(self.observation_path(decision_index), observation)
-        _write_json(self.current_observation_path, observation)
-        _write_json(self.legal_actions_path, legal_actions)
+        _write_json(self.root / "observations" / f"turn_{decision_index:06d}.json", observation)
+        _write_json(self.root / "current_observation.json", observation)
+        _write_json(self.root / "legal_actions.json", legal_actions)
         _write_json(
-            self.current_decision_path,
+            self.root / "current_decision.json",
             {
                 "decision_index": decision_index,
                 "attempt": attempt,
                 "seat_color": self.color,
-                "output_path": self.container_path(host_output_path),
+                "output_path": container_output_path,
             },
         )
         return host_output_path
-
-    def read_attempt_output(self, decision_index: int, attempt: int) -> dict:
-        """Read and parse the agent's output file for a given decision/attempt."""
-        path = self.output_path(decision_index, attempt)
-        return json.loads(path.read_text(encoding="utf-8"))
 
 
 def create_seat_workspace(
@@ -175,15 +127,15 @@ def create_seat_workspace(
     agent's container; it is used when writing agent-facing path references.
     """
     root.mkdir(parents=True, exist_ok=False)
-    ws = SeatWorkspace(color=color, root=root, container_root=container_root)
-    ws.observations_dir.mkdir()
-    ws.outputs_dir.mkdir()
-    ws.pi_sessions_dir.mkdir(parents=True)
-    ws.pi_extensions_dir.mkdir(parents=True)
-    ws.agents_md_path.write_text(agents_md or DEFAULT_AGENTS_MD, encoding="utf-8")
+    (root / "observations").mkdir()
+    (root / "outputs").mkdir()
+    (root / ".pi" / "sessions").mkdir(parents=True)
+    extensions_dir = root / ".pi" / "extensions"
+    extensions_dir.mkdir()
+    (root / "AGENTS.md").write_text(agents_md or DEFAULT_AGENTS_MD, encoding="utf-8")
     if pi_extension_path is not None:
-        shutil.copy2(pi_extension_path, ws.pi_extensions_dir / pi_extension_path.name)
-    return ws
+        shutil.copy2(pi_extension_path, extensions_dir / pi_extension_path.name)
+    return SeatWorkspace(color=color, root=root, container_root=container_root)
 
 
 def destroy_seat_workspace(
