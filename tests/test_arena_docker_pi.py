@@ -178,15 +178,15 @@ def test_start_builds_workspace_container_and_pi(tmp_path, patched_runtime):
     agent.start(game_id="g123", color="RED", workspace_root=tmp_path)
 
     # Workspace was created on disk.
-    assert (tmp_path / "workspaces" / "RED" / "AGENTS.md").is_file()
-    assert (tmp_path / "workspaces" / "RED" / ".pi" / "extensions" / "catanatron-arena.ts").is_file()
+    assert (tmp_path / "RED" / "AGENTS.md").is_file()
+    assert (tmp_path / "RED" / ".pi" / "extensions" / "catanatron-arena.ts").is_file()
 
     # Container spec carries name, image, mount, env passthrough.
     container = agent._container  # noqa: SLF001
     assert container is not None and container.started
     assert container.spec.name == "catanatron-arena-g123-RED"
     assert container.spec.image == DEFAULT_IMAGE
-    assert container.spec.bind_mounts[0].host == tmp_path / "workspaces" / "RED"
+    assert container.spec.bind_mounts[0].host == tmp_path / "RED"
     env_names = [e.name for e in container.spec.env]
     assert "ANTHROPIC_API_KEY" in env_names
 
@@ -216,7 +216,7 @@ def test_stop_cleans_up_workspace_container_and_pi(tmp_path, patched_runtime):
     container = agent._container  # noqa: SLF001
     pi = agent._pi  # noqa: SLF001
     reader = agent._reader  # noqa: SLF001
-    workspace_root = tmp_path / "workspaces" / "RED"
+    workspace_root = tmp_path / "RED"
     assert workspace_root.exists()
 
     agent.stop()
@@ -249,7 +249,7 @@ def test_choose_action_writes_decision_files_and_sends_prompt(tmp_path, patched_
         "legal_actions": [{"id": 7}, {"id": 9}],
     }
     output_path = (
-        tmp_path / "workspaces" / "RED" / "outputs" / "turn_000005_attempt_001.json"
+        tmp_path / "RED" / "outputs" / "turn_000005_attempt_001.json"
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
@@ -263,7 +263,7 @@ def test_choose_action_writes_decision_files_and_sends_prompt(tmp_path, patched_
     assert selected.rationale == "build settlement"
 
     # Decision files were written.
-    ws_root = tmp_path / "workspaces" / "RED"
+    ws_root = tmp_path / "RED"
     assert (ws_root / "decision_meta.json").is_file()
     assert (ws_root / "legal_actions.json").is_file()
     assert (ws_root / "current_observation.json").is_file()
@@ -281,7 +281,7 @@ def test_choose_action_retry_prompt_differs_from_first(tmp_path, patched_runtime
     agent.start(game_id="g1", color="RED", workspace_root=tmp_path)
 
     obs = {"decision_index": 0, "legal_actions": [{"id": 1}]}
-    output = tmp_path / "workspaces" / "RED" / "outputs" / "turn_000000_attempt_002.json"
+    output = tmp_path / "RED" / "outputs" / "turn_000000_attempt_002.json"
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps({"action_id": 1, "rationale": ""}), encoding="utf-8")
 
@@ -319,7 +319,7 @@ def test_choose_action_non_int_action_id_raises_invalid(tmp_path, patched_runtim
     agent.start(game_id="g1", color="RED", workspace_root=tmp_path)
 
     obs = {"decision_index": 0, "legal_actions": []}
-    output = tmp_path / "workspaces" / "RED" / "outputs" / "turn_000000_attempt_001.json"
+    output = tmp_path / "RED" / "outputs" / "turn_000000_attempt_001.json"
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps({"action_id": "twelve"}), encoding="utf-8")
 

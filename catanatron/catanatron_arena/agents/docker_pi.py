@@ -69,7 +69,7 @@ class DockerPiAgent:
             raise RuntimeError(f"{self.name} already started")
         self._color = color
         self._workspace = create_seat_workspace(
-            workspace_root / "workspaces" / color,
+            workspace_root / color,
             color=color,
             pi_extension_path=DEFAULT_PI_EXTENSION_PATH,
         )
