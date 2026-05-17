@@ -1,6 +1,7 @@
 # Added by Bryan
 .vscode
 logs/
+/runs
 pstats
 data/
 profile.pstats
