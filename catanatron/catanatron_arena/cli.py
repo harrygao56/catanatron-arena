@@ -8,7 +8,7 @@ from pathlib import Path
 import click
 
 import catanatron_arena
-from catanatron_arena.agents.local import build_local_agent
+from catanatron_arena.agents import build_local_agent, build_pi_agent
 from catanatron_arena.runner.match import MatchConfig, run_match
 
 
@@ -59,7 +59,7 @@ def run(
         game_seed = seed + game_index
         game_specs = _rotate_specs(specs, game_index) if rotate_seats else specs
         runtimes = [
-            build_local_agent(spec, seed=game_seed + agent_index)
+            _build_agent(spec, seed=game_seed + agent_index)
             for agent_index, spec in enumerate(game_specs)
         ]
         result = run_match(
@@ -161,6 +161,16 @@ def rank(run_dir: Path):
                 f"{agent}: seats={agent_games[agent]} wins={agent_wins.get(agent, 0)} "
                 f"win_rate={win_rate:.3f} avg_vp={avg_vp:.2f}"
             )
+
+
+def _build_agent(spec: str, *, seed: int):
+    """Dispatch a CLI agent spec to the right builder.
+
+    `pi:<provider>/<model>` → DockerPiAgent; everything else → local agent.
+    """
+    if spec.startswith("pi:"):
+        return build_pi_agent(spec)
+    return build_local_agent(spec, seed=seed)
 
 
 def _rotate_specs(specs: list[str], offset: int) -> list[str]:

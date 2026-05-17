@@ -120,7 +120,7 @@ class InvalidAgent:
     name = "invalid"
     max_invalid_retries = 0
 
-    def choose_action(self, observation):
+    def choose_action(self, observation, attempt=1):
         from catanatron_arena.protocol.actions import SelectedAction
 
         return SelectedAction(action_id=-1, rationale="bad id")

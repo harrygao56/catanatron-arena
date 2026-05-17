@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -82,81 +83,94 @@ def run_match(
         },
     )
 
-    decision_index = 0
-    while game.winning_color() is None and game.state.num_turns < config.max_turns:
-        if decision_index >= config.max_decisions:
-            break
+    workspace_root = output_dir / "games" / game.id
 
-        color = game.state.current_color()
-        runtime = runtimes_by_color[color]
-        observation = build_observation(game, config.map_type, decision_index)
-
-        max_retries = getattr(runtime, "max_invalid_retries", config.default_invalid_retries)
-        attempts = []
-        started = time.monotonic()
-        for attempt_index in range(max_retries + 1):
-            if hasattr(runtime, "choose_action_from_game"):
-                selected = runtime.choose_action_from_game(game, config.map_type)
-            else:
-                selected = runtime.choose_action(observation)
-            try:
-                action = validate_selected_action(game, selected.action_id, config.map_type)
-                status = "ok" if attempt_index == 0 else "ok_after_retry"
-                error = None
-                break
-            except InvalidActionSelection as exc:
-                attempts.append(
-                    {
-                        "attempt": attempt_index + 1,
-                        "selected_action_id": selected.action_id,
-                        "rationale": selected.rationale,
-                        "error": str(exc),
-                    }
+    with ExitStack() as stack:
+        for color, agent in runtimes_by_color.items():
+            if hasattr(agent, "start") and hasattr(agent, "stop"):
+                agent.start(
+                    game_id=game.id,
+                    color=color.value,
+                    workspace_root=workspace_root,
                 )
-                if attempt_index == max_retries:
-                    latency_ms = (time.monotonic() - started) * 1000
-                    reason = (
-                        f"{runtime.name} selected invalid action after "
-                        f"{max_retries + 1} attempt(s)"
-                    )
-                    recorder.record_failed_decision(
-                        observation,
-                        attempts,
-                        latency_ms,
-                        "invalid_action_failed",
-                        reason,
-                    )
-                    replay_path = recorder.fail_game(game, reason)
-                    return MatchResult(
-                        game_id=game.id,
-                        winner=None,
-                        turns=game.state.num_turns,
-                        decisions=decision_index + 1,
-                        replay_path=replay_path,
-                        failed=True,
-                        failure_reason=reason,
-                    )
+                stack.callback(agent.stop)
 
-        latency_ms = (time.monotonic() - started) * 1000
+        decision_index = 0
+        while game.winning_color() is None and game.state.num_turns < config.max_turns:
+            if decision_index >= config.max_decisions:
+                break
 
-        action_record = game.execute(action)
-        recorder.record_decision(
-            observation,
-            selected,
-            action,
-            action_record,
-            latency_ms,
-            status,
-            error,
+            color = game.state.current_color()
+            runtime = runtimes_by_color[color]
+            observation = build_observation(game, config.map_type, decision_index)
+
+            max_retries = getattr(runtime, "max_invalid_retries", config.default_invalid_retries)
+            attempts: list[dict] = []
+            started = time.monotonic()
+            for attempt_index in range(max_retries + 1):
+                selected = None
+                try:
+                    if hasattr(runtime, "choose_action_from_game"):
+                        selected = runtime.choose_action_from_game(game, config.map_type)
+                    else:
+                        selected = runtime.choose_action(observation, attempt=attempt_index + 1)
+                    action = validate_selected_action(game, selected.action_id, config.map_type)
+                    status = "ok" if attempt_index == 0 else "ok_after_retry"
+                    error = None
+                    break
+                except InvalidActionSelection as exc:
+                    attempts.append(
+                        {
+                            "attempt": attempt_index + 1,
+                            "selected_action_id": selected.action_id if selected else None,
+                            "rationale": selected.rationale if selected else None,
+                            "error": str(exc),
+                        }
+                    )
+                    if attempt_index == max_retries:
+                        latency_ms = (time.monotonic() - started) * 1000
+                        reason = (
+                            f"{runtime.name} failed to select a valid action after "
+                            f"{max_retries + 1} attempt(s)"
+                        )
+                        recorder.record_failed_decision(
+                            observation,
+                            attempts,
+                            latency_ms,
+                            "invalid_action_failed",
+                            reason,
+                        )
+                        replay_path = recorder.fail_game(game, reason)
+                        return MatchResult(
+                            game_id=game.id,
+                            winner=None,
+                            turns=game.state.num_turns,
+                            decisions=decision_index + 1,
+                            replay_path=replay_path,
+                            failed=True,
+                            failure_reason=reason,
+                        )
+
+            latency_ms = (time.monotonic() - started) * 1000
+
+            action_record = game.execute(action)
+            recorder.record_decision(
+                observation,
+                selected,
+                action,
+                action_record,
+                latency_ms,
+                status,
+                error,
+            )
+            decision_index += 1
+
+        replay_path = recorder.finish_game(game)
+        winner = game.winning_color()
+        return MatchResult(
+            game_id=game.id,
+            winner=winner.value if winner else None,
+            turns=game.state.num_turns,
+            decisions=decision_index,
+            replay_path=replay_path,
         )
-        decision_index += 1
-
-    replay_path = recorder.finish_game(game)
-    winner = game.winning_color()
-    return MatchResult(
-        game_id=game.id,
-        winner=winner.value if winner else None,
-        turns=game.state.num_turns,
-        decisions=decision_index,
-        replay_path=replay_path,
-    )

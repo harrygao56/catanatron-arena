@@ -19,7 +19,7 @@ class AgentRuntime(Protocol):
     name: str
     max_invalid_retries: int
 
-    def choose_action(self, observation: dict) -> SelectedAction:
+    def choose_action(self, observation: dict, attempt: int = 1) -> SelectedAction:
         ...
 
 
@@ -28,7 +28,7 @@ class FirstActionAgent:
     name: str = "first_action"
     max_invalid_retries: int = 0
 
-    def choose_action(self, observation: dict) -> SelectedAction:
+    def choose_action(self, observation: dict, attempt: int = 1) -> SelectedAction:
         action_id = observation["legal_actions"][0]["id"]
         return SelectedAction(action_id=action_id, rationale="selected first legal action")
 
@@ -39,7 +39,7 @@ class RandomAgent:
     name: str = "random"
     max_invalid_retries: int = 0
 
-    def choose_action(self, observation: dict) -> SelectedAction:
+    def choose_action(self, observation: dict, attempt: int = 1) -> SelectedAction:
         action = self.rng.choice(observation["legal_actions"])
         return SelectedAction(action_id=action["id"], rationale="selected random legal action")
 
@@ -97,7 +97,7 @@ class CatanatronPlayerAgent:
     args: tuple = ()
     max_invalid_retries: int = 0
 
-    def choose_action(self, observation: dict) -> SelectedAction:
+    def choose_action(self, observation: dict, attempt: int = 1) -> SelectedAction:
         raise RuntimeError(f"{self.name} requires trusted game-state access")
 
     def choose_action_from_game(self, game, map_type: str) -> SelectedAction:
