@@ -11,6 +11,7 @@ from catanatron_arena.runtime.docker import (
     build_run_argv,
     workspace_mount,
 )
+from catanatron_arena.runtime.pi_rpc import PiRpcClient
 from catanatron_arena.runtime.workspace import (
     SeatWorkspace,
     create_seat_workspace,
@@ -25,6 +26,7 @@ __all__ = [
     "ContainerSpec",
     "DockerRuntime",
     "EnvVar",
+    "PiRpcClient",
     "SeatWorkspace",
     "build_exec_argv",
     "build_run_argv",
