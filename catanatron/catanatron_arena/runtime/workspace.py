@@ -14,6 +14,7 @@ Layout::
       .pi/
         sessions/
         extensions/
+          package.json                # declares the extension's npm deps
 """
 
 from __future__ import annotations
@@ -66,6 +67,21 @@ ends. There is no cross-game memory. You may create scratch files (notes,
 - Deck order or future dice rolls.
 - The raw engine `Game` or `State` objects.
 """
+
+
+DEFAULT_EXTENSIONS_PACKAGE_JSON = {
+    "name": "catanatron-arena-extensions",
+    "private": True,
+    "description": (
+        "Declares npm deps for the choose_action Pi extension. "
+        "Runtime resolution comes from the agent image's NODE_PATH; "
+        "this file documents what the extension imports."
+    ),
+    "dependencies": {
+        "@earendil-works/pi-coding-agent": "*",
+        "typebox": "*",
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -121,6 +137,7 @@ def create_seat_workspace(
     extensions_dir = root / ".pi" / "extensions"
     extensions_dir.mkdir()
     (root / "AGENTS.md").write_text(agents_md or DEFAULT_AGENTS_MD, encoding="utf-8")
+    _write_json(extensions_dir / "package.json", DEFAULT_EXTENSIONS_PACKAGE_JSON)
     if pi_extension_path is not None:
         shutil.copy2(pi_extension_path, extensions_dir / pi_extension_path.name)
     return SeatWorkspace(color=color, root=root, container_root=container_root)

@@ -26,6 +26,19 @@ def test_create_seat_workspace_lays_out_expected_structure(tmp_path):
     assert not (ws.root / "memory.md").exists()
 
 
+def test_create_seat_workspace_writes_extensions_package_json(tmp_path):
+    import json
+
+    ws = create_seat_workspace(tmp_path / "RED", color="RED")
+    package = json.loads(
+        (ws.root / ".pi" / "extensions" / "package.json").read_text(encoding="utf-8")
+    )
+
+    assert package["name"] == "catanatron-arena-extensions"
+    assert "typebox" in package["dependencies"]
+    assert "@earendil-works/pi-coding-agent" in package["dependencies"]
+
+
 def test_create_seat_workspace_accepts_custom_agents_md(tmp_path):
     ws = create_seat_workspace(
         tmp_path / "BLUE",
