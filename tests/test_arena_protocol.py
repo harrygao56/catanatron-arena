@@ -71,8 +71,30 @@ def test_local_match_writes_replay(tmp_path):
     assert result.replay_path.exists()
     replay = json.loads(result.replay_path.read_text(encoding="utf-8"))
     assert replay["decisions"]
+    assert replay["schema_version"] == 2
+    assert replay["initial_state_ref"] == "states/state_000000.json"
     assert replay["final"]["num_decisions"] == result.decisions
     assert replay["config"]["agent_by_color"]
+
+    game_dir = result.replay_path.parent
+    first_decision = replay["decisions"][0]
+    assert (game_dir / first_decision["state_before_ref"]).exists()
+    assert (game_dir / first_decision["state_after_ref"]).exists()
+    assert first_decision["decision_ref"] == "decisions/decision_000000.json"
+
+    decision_detail = json.loads(
+        (game_dir / first_decision["decision_ref"]).read_text(encoding="utf-8")
+    )
+    assert decision_detail["observation"]["decision_index"] == 0
+    assert decision_detail["legal_actions"]
+    assert (
+        decision_detail["selected"]["action_id"] == first_decision["selected_action_id"]
+    )
+
+    viewer = json.loads((game_dir / "viewer.json").read_text(encoding="utf-8"))
+    assert viewer["game_id"] == result.game_id
+    assert viewer["initial_state_ref"] == "states/state_000000.json"
+    assert viewer["timeline"][0]["decision_ref"] == first_decision["decision_ref"]
 
 
 def test_compact_match_skips_observation_files(tmp_path):
@@ -136,7 +158,9 @@ class InvalidAgentWithRuntimeRefs:
         return SelectedAction(
             action_id=-1,
             rationale="bad id",
-            runtime_refs={"prompt": "runtime/RED/decisions/turn_000000_attempt_001/prompt.txt"},
+            runtime_refs={
+                "prompt": "runtime/RED/decisions/turn_000000_attempt_001/prompt.txt"
+            },
         )
 
 
@@ -159,7 +183,9 @@ def test_invalid_local_agent_fails_match(tmp_path):
 
 
 def test_failed_decision_records_runtime_refs(tmp_path):
-    agents = [InvalidAgentWithRuntimeRefs()] + [build_local_agent("first_action") for _ in range(3)]
+    agents = [InvalidAgentWithRuntimeRefs()] + [
+        build_local_agent("first_action") for _ in range(3)
+    ]
 
     result = run_match(
         agents,
@@ -174,6 +200,14 @@ def test_failed_decision_records_runtime_refs(tmp_path):
         if decision["status"] == "invalid_action_failed"
     )
     assert decision["runtime_refs"]["1"]["prompt"] == (
+        "runtime/RED/decisions/turn_000000_attempt_001/prompt.txt"
+    )
+    detail = json.loads(
+        (result.replay_path.parent / decision["decision_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert detail["agent"]["1"]["refs"]["prompt"] == (
         "runtime/RED/decisions/turn_000000_attempt_001/prompt.txt"
     )
 

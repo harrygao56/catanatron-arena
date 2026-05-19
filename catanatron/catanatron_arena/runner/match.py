@@ -104,17 +104,25 @@ def run_match(
             runtime = runtimes_by_color[color]
             observation = build_observation(game, config.map_type, decision_index)
 
-            max_retries = getattr(runtime, "max_invalid_retries", config.default_invalid_retries)
+            max_retries = getattr(
+                runtime, "max_invalid_retries", config.default_invalid_retries
+            )
             attempts: list[dict] = []
             started = time.monotonic()
             for attempt_index in range(max_retries + 1):
                 selected = None
                 try:
                     if hasattr(runtime, "choose_action_from_game"):
-                        selected = runtime.choose_action_from_game(game, config.map_type)
+                        selected = runtime.choose_action_from_game(
+                            game, config.map_type
+                        )
                     else:
-                        selected = runtime.choose_action(observation, attempt=attempt_index + 1)
-                    action = validate_selected_action(game, selected.action_id, config.map_type)
+                        selected = runtime.choose_action(
+                            observation, attempt=attempt_index + 1
+                        )
+                    action = validate_selected_action(
+                        game, selected.action_id, config.map_type
+                    )
                     status = "ok" if attempt_index == 0 else "ok_after_retry"
                     error = None
                     break
@@ -122,7 +130,9 @@ def run_match(
                     attempts.append(
                         {
                             "attempt": attempt_index + 1,
-                            "selected_action_id": selected.action_id if selected else None,
+                            "selected_action_id": (
+                                selected.action_id if selected else None
+                            ),
                             "rationale": selected.rationale if selected else None,
                             "error": str(exc),
                             "runtime_refs": (
@@ -164,7 +174,8 @@ def run_match(
                 action_record,
                 latency_ms,
                 status,
-                error,
+                game=game,
+                error=error,
             )
             decision_index += 1
 
