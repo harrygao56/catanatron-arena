@@ -1,4 +1,5 @@
 import os
+import random
 import tempfile
 
 from click.testing import CliRunner
@@ -15,8 +16,12 @@ def test_play():
 
 
 def test_play_strong():
+    random.seed(0)
     runner = CliRunner()
-    result = runner.invoke(simulate, ["--num=1", "--players=AB,SAB,M:2:True,G:2"])
+    result = runner.invoke(
+        simulate,
+        ["--num=1", "--players=AB,SAB,M:2:True,G:2", "--config-vps-to-win=3"],
+    )
     assert result.exit_code == 0
     assert "Game Summary" in result.output
 
