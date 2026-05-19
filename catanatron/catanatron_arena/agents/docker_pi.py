@@ -10,6 +10,7 @@ the game and `stop()` after; per-decision behavior happens in
 from __future__ import annotations
 
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
@@ -198,6 +199,7 @@ class DockerPiAgent:
 
         if outcome.status == "ok" and outcome.output is not None:
             copy_if_exists(output_path, attempt_artifacts.output_copy_path)
+            _drain_terminal_events(self._reader.pull, attempt_artifacts.events_path)
             action_id = outcome.output.get("action_id")
             if not isinstance(action_id, int):
                 write_json(
@@ -291,3 +293,16 @@ def _recording_pull(pull, events_path: Path):
         return item
 
     return wrapped
+
+
+def _drain_terminal_events(pull, events_path: Path, timeout: float = 2.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        item = pull(0.05)
+        if not isinstance(item, dict):
+            continue
+        from catanatron_arena.runtime import append_jsonl
+
+        append_jsonl(events_path, item)
+        if item.get("type") == "agent_end":
+            return

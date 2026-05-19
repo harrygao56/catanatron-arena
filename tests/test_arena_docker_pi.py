@@ -289,6 +289,8 @@ def test_choose_action_writes_decision_files_and_sends_prompt(tmp_path, patched_
         json.dumps({"action_id": 7, "rationale": "build settlement"}),
         encoding="utf-8",
     )
+    reader = agent._reader  # noqa: SLF001
+    reader.events_for_pull.append({"type": "agent_end"})
 
     selected = agent.choose_action(obs, attempt=1)
 
@@ -311,6 +313,9 @@ def test_choose_action_writes_decision_files_and_sends_prompt(tmp_path, patched_
     assert (artifacts / "current_observation.json").is_file()
     assert (artifacts / "legal_actions.json").is_file()
     assert (artifacts / "choice.json").is_file()
+    assert '"type": "agent_end"' in (artifacts / "agent_events.jsonl").read_text(
+        encoding="utf-8"
+    )
     assert selected.runtime_refs["prompt"] == (
         "runtime/RED/decisions/turn_000005_attempt_001/prompt.txt"
     )
