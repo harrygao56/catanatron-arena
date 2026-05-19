@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import click
+from dotenv import load_dotenv
 
 import catanatron_arena
 from catanatron_arena.agents import (
@@ -65,6 +66,7 @@ def run(
 ):
     """Run local arena matches."""
     output_dir.mkdir(parents=True, exist_ok=True)
+    load_dotenv(dotenv_path=Path(".env"), override=False)
     specs = [item.strip() for item in agents.split(",") if item.strip()]
     pi_configs: dict[str, DockerPiAgentConfig] = (
         load_pi_agents_config(agents_config_path) if agents_config_path else {}

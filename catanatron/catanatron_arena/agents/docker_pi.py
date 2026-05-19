@@ -29,7 +29,12 @@ from catanatron_arena.runtime import (
 )
 
 
-DEFAULT_ENV_PASSTHROUGH = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY")
+DEFAULT_ENV_PASSTHROUGH = (
+    "ANTHROPIC_API_KEY",
+    "GEMINI_API_KEY",
+    "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY",
+)
 DEFAULT_IMAGE = "catanatron-arena-agent:latest"
 
 
