@@ -6,9 +6,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import click
+from dotenv import load_dotenv
 
 import catanatron_arena
-from catanatron_arena.agents.local import build_local_agent
+from catanatron_arena.agents import (
+    DockerPiAgent,
+    DockerPiAgentConfig,
+    build_local_agent,
+    build_pi_agent,
+    load_pi_agents_config,
+)
 from catanatron_arena.runner.match import MatchConfig, run_match
 
 
@@ -37,6 +44,13 @@ def main():
     show_default=True,
     help="Write full per-decision observation JSON files, or compact replay metadata only.",
 )
+@click.option(
+    "--agents-config",
+    "agents_config_path",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="TOML file of named Pi agent configs; reference with pi:<name>.",
+)
 def run(
     agents: str,
     games: int,
@@ -48,10 +62,15 @@ def run(
     max_decisions: int,
     rotate_seats: bool,
     observations: bool,
+    agents_config_path: Path | None,
 ):
     """Run local arena matches."""
     output_dir.mkdir(parents=True, exist_ok=True)
+    load_dotenv(dotenv_path=Path(".env"), override=False)
     specs = [item.strip() for item in agents.split(",") if item.strip()]
+    pi_configs: dict[str, DockerPiAgentConfig] = (
+        load_pi_agents_config(agents_config_path) if agents_config_path else {}
+    )
     results = []
     started_at = _utc_now()
 
@@ -59,7 +78,7 @@ def run(
         game_seed = seed + game_index
         game_specs = _rotate_specs(specs, game_index) if rotate_seats else specs
         runtimes = [
-            build_local_agent(spec, seed=game_seed + agent_index)
+            _build_agent(spec, seed=game_seed + agent_index, pi_configs=pi_configs)
             for agent_index, spec in enumerate(game_specs)
         ]
         result = run_match(
@@ -161,6 +180,28 @@ def rank(run_dir: Path):
                 f"{agent}: seats={agent_games[agent]} wins={agent_wins.get(agent, 0)} "
                 f"win_rate={win_rate:.3f} avg_vp={avg_vp:.2f}"
             )
+
+
+def _build_agent(
+    spec: str,
+    *,
+    seed: int,
+    pi_configs: dict[str, DockerPiAgentConfig] | None = None,
+):
+    """Dispatch a CLI agent spec to the right builder.
+
+    For pi specs, resolution order is:
+      1. `pi:<name>` where `<name>` is a key in `pi_configs` → that named entry.
+      2. `pi:<provider>/<model>` → inline form with defaults.
+
+    Anything else → local agent.
+    """
+    if spec.startswith("pi:"):
+        rest = spec[len("pi:") :]
+        if pi_configs and rest in pi_configs:
+            return DockerPiAgent(pi_configs[rest])
+        return build_pi_agent(spec)
+    return build_local_agent(spec, seed=seed)
 
 
 def _rotate_specs(specs: list[str], offset: int) -> list[str]:

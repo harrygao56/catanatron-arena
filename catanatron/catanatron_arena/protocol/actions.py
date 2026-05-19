@@ -15,11 +15,16 @@ MapType = Literal["BASE", "TOURNAMENT", "MINI"]
 class InvalidActionSelection(ValueError):
     """Raised when a selected action id is not legal for the current decision."""
 
+    def __init__(self, message: str, runtime_refs: dict[str, str] | None = None):
+        super().__init__(message)
+        self.runtime_refs = runtime_refs or {}
+
 
 @dataclass(frozen=True)
 class SelectedAction:
     action_id: int
     rationale: str | None = None
+    runtime_refs: dict[str, str] | None = None
 
 
 def legal_action_json(game, map_type: MapType) -> list[dict[str, Any]]:

@@ -58,6 +58,7 @@ class ReplayRecorder:
                 "latency_ms": latency_ms,
                 "status": status,
                 "error": error,
+                "runtime_refs": selected.runtime_refs,
             }
         )
 
@@ -86,6 +87,7 @@ class ReplayRecorder:
                 "latency_ms": latency_ms,
                 "status": status,
                 "error": error,
+                "runtime_refs": _attempt_runtime_refs(attempts),
             }
         )
 
@@ -135,3 +137,12 @@ def _victory_points(game) -> dict[str, int]:
     for index, color in enumerate(game.state.colors):
         points[color.value] = game.state.player_state[f"P{index}_ACTUAL_VICTORY_POINTS"]
     return points
+
+
+def _attempt_runtime_refs(attempts: list[dict[str, Any]]) -> dict[str, Any] | None:
+    refs = {
+        str(attempt["attempt"]): attempt["runtime_refs"]
+        for attempt in attempts
+        if attempt.get("runtime_refs")
+    }
+    return refs or None

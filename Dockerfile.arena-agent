@@ -1,0 +1,26 @@
+# Catanatron Arena agent runtime image.
+#
+# One container of this image is started per seat per game by `DockerPiAgent`.
+# The host:
+#   1. `docker run --rm --detach ... catanatron-arena-agent:latest sleep infinity`
+#      (workspace bind-mounted at /workspace, provider API keys passed as env)
+#   2. `docker exec -i ... pi --mode rpc --extension /workspace/.pi/extensions/catanatron-arena.ts`
+#
+# Build:
+#   docker build -t catanatron-arena-agent:latest -f Dockerfile.arena-agent .
+#
+# Smoke test (no API call):
+#   docker run --rm catanatron-arena-agent:latest pi --version
+FROM node:22-slim
+
+# Pi is the model-agent harness; typebox is used by our choose_action extension.
+# Installed globally so they resolve from any extension path; NODE_PATH below
+# makes Node's import resolution see them from /workspace/.pi/extensions/.
+RUN npm install -g --no-audit --no-fund --omit=optional \
+    @earendil-works/pi-coding-agent \
+    typebox \
+ && npm cache clean --force
+
+ENV NODE_PATH=/usr/local/lib/node_modules
+
+WORKDIR /workspace
