@@ -2,6 +2,13 @@
 
 from pathlib import Path
 
+from catanatron_arena.runtime.artifacts import (
+    AttemptArtifacts,
+    RuntimeArtifacts,
+    append_jsonl,
+    copy_if_exists,
+    write_json,
+)
 from catanatron_arena.runtime.decisions import (
     PIPE_CLOSED,
     DecisionOutcome,
@@ -30,6 +37,7 @@ DEFAULT_PI_EXTENSION_PATH = Path(__file__).parent / "pi_extension" / "catanatron
 __all__ = [
     "DEFAULT_PI_EXTENSION_PATH",
     "PIPE_CLOSED",
+    "AttemptArtifacts",
     "BindMount",
     "ContainerSpec",
     "DecisionOutcome",
@@ -38,11 +46,15 @@ __all__ = [
     "EnvVar",
     "PiEventReader",
     "PiRpcClient",
+    "RuntimeArtifacts",
     "SeatWorkspace",
+    "append_jsonl",
     "await_decision_output",
     "build_exec_argv",
     "build_run_argv",
+    "copy_if_exists",
     "create_seat_workspace",
     "destroy_seat_workspace",
+    "write_json",
     "workspace_mount",
 ]

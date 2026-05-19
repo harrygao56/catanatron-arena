@@ -126,6 +126,20 @@ class InvalidAgent:
         return SelectedAction(action_id=-1, rationale="bad id")
 
 
+class InvalidAgentWithRuntimeRefs:
+    name = "invalid-with-refs"
+    max_invalid_retries = 0
+
+    def choose_action(self, observation, attempt=1):
+        from catanatron_arena.protocol.actions import SelectedAction
+
+        return SelectedAction(
+            action_id=-1,
+            rationale="bad id",
+            runtime_refs={"prompt": "runtime/RED/decisions/turn_000000_attempt_001/prompt.txt"},
+        )
+
+
 def test_invalid_local_agent_fails_match(tmp_path):
     agents = [InvalidAgent()] + [build_local_agent("first_action") for _ in range(3)]
 
@@ -141,6 +155,26 @@ def test_invalid_local_agent_fails_match(tmp_path):
     assert any(
         decision["status"] == "invalid_action_failed"
         for decision in replay["decisions"]
+    )
+
+
+def test_failed_decision_records_runtime_refs(tmp_path):
+    agents = [InvalidAgentWithRuntimeRefs()] + [build_local_agent("first_action") for _ in range(3)]
+
+    result = run_match(
+        agents,
+        tmp_path,
+        MatchConfig(seed=7, map_type="MINI", vps_to_win=3, max_decisions=250),
+    )
+
+    replay = json.loads(result.replay_path.read_text(encoding="utf-8"))
+    decision = next(
+        decision
+        for decision in replay["decisions"]
+        if decision["status"] == "invalid_action_failed"
+    )
+    assert decision["runtime_refs"]["1"]["prompt"] == (
+        "runtime/RED/decisions/turn_000000_attempt_001/prompt.txt"
     )
 
 

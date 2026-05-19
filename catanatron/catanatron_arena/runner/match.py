@@ -125,6 +125,9 @@ def run_match(
                             "selected_action_id": selected.action_id if selected else None,
                             "rationale": selected.rationale if selected else None,
                             "error": str(exc),
+                            "runtime_refs": (
+                                selected.runtime_refs if selected else exc.runtime_refs
+                            ),
                         }
                     )
                     if attempt_index == max_retries:

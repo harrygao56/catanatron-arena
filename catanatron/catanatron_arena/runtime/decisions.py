@@ -16,6 +16,7 @@ from queue import Empty, Queue
 from typing import Callable, Literal
 
 from catanatron_arena.runtime.pi_rpc import PiRpcClient
+from catanatron_arena.runtime.artifacts import append_jsonl
 
 
 class _PipeClosedSentinel:
@@ -129,8 +130,9 @@ class PiEventReader:
     One reader per Pi session: `pi.iter_events()` can have only one consumer.
     """
 
-    def __init__(self, pi: PiRpcClient):
+    def __init__(self, pi: PiRpcClient, events_path: Path | None = None):
         self._pi = pi
+        self._events_path = events_path
         self._queue: Queue[dict | _PipeClosedSentinel] = Queue()
         self._thread = threading.Thread(target=self._run, daemon=True, name="pi-rpc-reader")
         self._thread.start()
@@ -138,6 +140,8 @@ class PiEventReader:
     def _run(self) -> None:
         try:
             for ev in self._pi.iter_events():
+                if self._events_path is not None:
+                    append_jsonl(self._events_path, ev)
                 self._queue.put(ev)
         except Exception:
             pass

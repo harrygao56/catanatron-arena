@@ -92,8 +92,9 @@ class FakePiEventReader:
     events_for_pull: list = field(default_factory=list)
     joined: bool = False
 
-    def __init__(self, pi):
+    def __init__(self, pi, events_path=None):
         self.pi = pi
+        self.events_path = events_path
         self.events_for_pull = []
         self.joined = False
 
@@ -226,6 +227,9 @@ def test_start_builds_workspace_container_and_pi(tmp_path, patched_runtime):
     assert "--model" in argv and "claude" in argv
     assert any("/.pi/extensions/catanatron-arena.ts" in a for a in argv)
     assert kw["text"] is True
+    assert kw["stderr"].name.endswith("runtime/RED/pi.stderr.log")
+    reader = agent._reader  # noqa: SLF001
+    assert reader.events_path == tmp_path / "runtime" / "RED" / "events.jsonl"
 
     agent.stop()
 
@@ -296,6 +300,23 @@ def test_choose_action_writes_decision_files_and_sends_prompt(tmp_path, patched_
     assert (ws_root / "decision_meta.json").is_file()
     assert (ws_root / "legal_actions.json").is_file()
     assert (ws_root / "current_observation.json").is_file()
+    artifacts = (
+        tmp_path
+        / "runtime"
+        / "RED"
+        / "decisions"
+        / "turn_000005_attempt_001"
+    )
+    assert (artifacts / "prompt.txt").is_file()
+    assert (artifacts / "current_observation.json").is_file()
+    assert (artifacts / "legal_actions.json").is_file()
+    assert (artifacts / "choice.json").is_file()
+    assert selected.runtime_refs["prompt"] == (
+        "runtime/RED/decisions/turn_000005_attempt_001/prompt.txt"
+    )
+    assert selected.runtime_refs["output"] == (
+        "runtime/RED/decisions/turn_000005_attempt_001/choice.json"
+    )
 
     # Prompt was sent with the right request id.
     pi = agent._pi  # noqa: SLF001
@@ -352,8 +373,11 @@ def test_choose_action_non_int_action_id_raises_invalid(tmp_path, patched_runtim
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps({"action_id": "twelve"}), encoding="utf-8")
 
-    with pytest.raises(InvalidActionSelection, match="non-integer"):
+    with pytest.raises(InvalidActionSelection, match="non-integer") as exc_info:
         agent.choose_action(obs, attempt=1)
+    assert exc_info.value.runtime_refs["error"] == (
+        "runtime/RED/decisions/turn_000000_attempt_001/error.json"
+    )
 
     agent.stop()
 

@@ -12,19 +12,24 @@ from __future__ import annotations
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TextIO
 
 from catanatron_arena.protocol.actions import InvalidActionSelection, SelectedAction
 from catanatron_arena.runtime import (
+    AttemptArtifacts,
     DEFAULT_PI_EXTENSION_PATH,
     ContainerSpec,
     DockerRuntime,
     EnvVar,
     PiEventReader,
     PiRpcClient,
+    RuntimeArtifacts,
     SeatWorkspace,
     await_decision_output,
+    copy_if_exists,
     create_seat_workspace,
     destroy_seat_workspace,
+    write_json,
     workspace_mount,
 )
 
@@ -68,11 +73,15 @@ class DockerPiAgent:
         self._pi: PiRpcClient | None = None
         self._reader: PiEventReader | None = None
         self._color: str | None = None
+        self._artifacts: RuntimeArtifacts | None = None
+        self._stderr_log: TextIO | None = None
 
     def start(self, *, game_id: str, color: str, workspace_root: Path) -> None:
         if self._workspace is not None:
             raise RuntimeError(f"{self.name} already started")
         self._color = color
+        self._artifacts = RuntimeArtifacts(workspace_root, color)
+        self._artifacts.prepare()
         self._workspace = create_seat_workspace(
             workspace_root / "workspaces" / color,
             color=color,
@@ -90,15 +99,17 @@ class DockerPiAgent:
         )
         self._container = DockerRuntime(spec)
         self._container.start()
+        self._stderr_log = self._artifacts.stderr_path.open("w", encoding="utf-8")
         pi_proc = self._container.exec(
             self._pi_argv(),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
+            stderr=self._stderr_log,
             text=True,
             encoding="utf-8",
         )
         self._pi = PiRpcClient(pi_proc)
-        self._reader = PiEventReader(self._pi)
+        self._reader = PiEventReader(self._pi, self._artifacts.session_events_path)
 
     def _pi_argv(self) -> list[str]:
         ws_root = self._workspace.container_root if self._workspace else "/workspace"
@@ -123,6 +134,7 @@ class DockerPiAgent:
             ("pi", lambda: self._pi.close() if self._pi else None),
             ("reader", lambda: self._reader.join() if self._reader else None),
             ("container", lambda: self._container.stop() if self._container else None),
+            ("stderr_log", lambda: self._stderr_log.close() if self._stderr_log else None),
             (
                 "workspace",
                 lambda: destroy_seat_workspace(self._workspace) if self._workspace else None,
@@ -136,6 +148,8 @@ class DockerPiAgent:
         self._reader = None
         self._container = None
         self._workspace = None
+        self._artifacts = None
+        self._stderr_log = None
 
     def __enter__(self) -> "DockerPiAgent":
         raise RuntimeError(
@@ -146,7 +160,12 @@ class DockerPiAgent:
         self.stop()
 
     def choose_action(self, observation: dict, attempt: int = 1) -> SelectedAction:
-        if self._workspace is None or self._pi is None or self._reader is None:
+        if (
+            self._workspace is None
+            or self._pi is None
+            or self._reader is None
+            or self._artifacts is None
+        ):
             raise RuntimeError(f"{self.name} not started")
 
         decision_index = int(observation["decision_index"])
@@ -154,23 +173,48 @@ class DockerPiAgent:
 
         prompt_id = f"decision-{decision_index:06d}-attempt-{attempt:03d}"
         prompt = self._build_prompt(observation, attempt)
+        attempt_artifacts = self._artifacts.attempt(decision_index, attempt)
+        _write_attempt_inputs(
+            attempt_artifacts,
+            prompt=prompt,
+            observation=observation,
+            workspace_root=self._workspace.root,
+        )
         self._pi.send_prompt(prompt, request_id=prompt_id)
 
         outcome = await_decision_output(
             output_path,
-            pull_event=self._reader.pull,
+            pull_event=_recording_pull(self._reader.pull, attempt_artifacts.events_path),
             timeout=self.config.move_timeout_seconds,
+        )
+        write_json(
+            attempt_artifacts.outcome_path,
+            {
+                "status": outcome.status,
+                "elapsed_seconds": outcome.elapsed_seconds,
+                "error": outcome.error,
+            },
         )
 
         if outcome.status == "ok" and outcome.output is not None:
+            copy_if_exists(output_path, attempt_artifacts.output_copy_path)
             action_id = outcome.output.get("action_id")
             if not isinstance(action_id, int):
+                write_json(
+                    attempt_artifacts.error_path,
+                    {
+                        "error": f"choose_action output had non-integer action_id: {action_id!r}",
+                        "output": outcome.output,
+                    },
+                )
                 raise InvalidActionSelection(
-                    f"choose_action output had non-integer action_id: {action_id!r}"
+                    f"choose_action output had non-integer action_id: {action_id!r}",
+                    runtime_refs=attempt_artifacts.refs(self._artifacts.game_dir),
                 )
             return SelectedAction(
                 action_id=action_id,
                 rationale=str(outcome.output.get("rationale") or ""),
+                runtime_refs=attempt_artifacts.refs(self._artifacts.game_dir),
             )
 
         # Non-ok outcome: surface as InvalidActionSelection so the match loop
@@ -180,9 +224,18 @@ class DockerPiAgent:
             self._pi.send_abort()
         except Exception:
             pass
+        write_json(
+            attempt_artifacts.error_path,
+            {
+                "status": outcome.status,
+                "error": outcome.error or outcome.status,
+                "events": list(outcome.events),
+            },
+        )
         raise InvalidActionSelection(
             f"{self.name} {outcome.status} after {outcome.elapsed_seconds:.1f}s: "
-            f"{outcome.error or outcome.status}"
+            f"{outcome.error or outcome.status}",
+            runtime_refs=attempt_artifacts.refs(self._artifacts.game_dir),
         )
 
     def _build_prompt(self, observation: dict, attempt: int) -> str:
@@ -213,3 +266,28 @@ def build_pi_agent(spec: str) -> DockerPiAgent:
     if not provider or not model:
         raise ValueError(f"pi agent spec must be pi:<provider>/<model>, got {spec!r}")
     return DockerPiAgent(DockerPiAgentConfig(provider=provider, model=model))
+
+
+def _write_attempt_inputs(
+    artifacts: AttemptArtifacts,
+    *,
+    prompt: str,
+    observation: dict,
+    workspace_root: Path,
+) -> None:
+    artifacts.prompt_path.write_text(prompt, encoding="utf-8")
+    write_json(artifacts.observation_path, observation)
+    copy_if_exists(workspace_root / "legal_actions.json", artifacts.legal_actions_path)
+    copy_if_exists(workspace_root / "decision_meta.json", artifacts.decision_meta_path)
+
+
+def _recording_pull(pull, events_path: Path):
+    def wrapped(timeout: float):
+        item = pull(timeout)
+        if isinstance(item, dict):
+            from catanatron_arena.runtime import append_jsonl
+
+            append_jsonl(events_path, item)
+        return item
+
+    return wrapped
