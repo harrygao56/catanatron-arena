@@ -121,6 +121,8 @@ class FakePiRpcClient:
         self.aborted = False
 
     def send_prompt(self, message, request_id=None):
+        if message == "RAISE_ON_SEND":
+            raise BrokenPipeError("pipe closed")
         self.sent.append({"type": "prompt", "message": message, "id": request_id})
 
     def send_abort(self):
@@ -365,6 +367,31 @@ def test_choose_action_timeout_raises_invalid_action_selection(tmp_path, patched
     # Agent sent an abort to free Pi up for the next attempt.
     pi = agent._pi  # noqa: SLF001
     assert pi.aborted
+
+    agent.stop()
+
+
+def test_choose_action_prompt_send_failure_records_artifacts(tmp_path, patched_runtime, monkeypatch):
+    agent = DockerPiAgent(DockerPiAgentConfig(provider="anthropic", model="claude"))
+    agent.start(game_id="g1", color="RED", workspace_root=tmp_path)
+    monkeypatch.setattr(agent, "_build_prompt", lambda _observation, _attempt: "RAISE_ON_SEND")
+
+    obs = {"decision_index": 0, "legal_actions": [{"id": 1}]}
+
+    with pytest.raises(InvalidActionSelection, match="failed to send prompt") as exc_info:
+        agent.choose_action(obs, attempt=1)
+
+    assert exc_info.value.runtime_refs["error"] == (
+        "runtime/RED/decisions/turn_000000_attempt_001/error.json"
+    )
+    assert (
+        tmp_path
+        / "runtime"
+        / "RED"
+        / "decisions"
+        / "turn_000000_attempt_001"
+        / "error.json"
+    ).is_file()
 
     agent.stop()
 

@@ -181,7 +181,28 @@ class DockerPiAgent:
             observation=observation,
             workspace_root=self._workspace.root,
         )
-        self._pi.send_prompt(prompt, request_id=prompt_id)
+        try:
+            self._pi.send_prompt(prompt, request_id=prompt_id)
+        except Exception as exc:
+            write_json(
+                attempt_artifacts.outcome_path,
+                {
+                    "status": "prompt_send_failed",
+                    "elapsed_seconds": 0,
+                    "error": str(exc),
+                },
+            )
+            write_json(
+                attempt_artifacts.error_path,
+                {
+                    "status": "prompt_send_failed",
+                    "error": str(exc),
+                },
+            )
+            raise InvalidActionSelection(
+                f"{self.name} failed to send prompt: {exc}",
+                runtime_refs=attempt_artifacts.refs(self._artifacts.game_dir),
+            ) from exc
 
         outcome = await_decision_output(
             output_path,
