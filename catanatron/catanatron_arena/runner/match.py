@@ -83,7 +83,7 @@ def run_match(
         },
     )
 
-    workspace_root = output_dir / "games" / game.id
+    workspace_root = output_dir.resolve() / "games" / game.id
 
     with ExitStack() as stack:
         for color, agent in runtimes_by_color.items():

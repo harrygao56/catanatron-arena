@@ -399,6 +399,6 @@ def test_run_match_calls_start_and_stop_on_lifecycle_agents(tmp_path, monkeypatc
     # start() called for the lifecycle-aware agent (RED seat) with a game-scoped workspace_root.
     assert "RED" in started
     game_id, workspace_root = started["RED"]
-    assert workspace_root == tmp_path / "games" / game_id
+    assert workspace_root == (tmp_path / "games" / game_id).resolve()
     # stop() called once.
     assert stopped == [True]
