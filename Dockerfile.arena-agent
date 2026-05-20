@@ -21,6 +21,11 @@ RUN npm install -g --no-audit --no-fund --omit=optional \
     typebox \
  && npm cache clean --force
 
+# Force HTTP/1.1: undici v8 (bundled with pi-coding-agent) crashes on stale H2
+# sessions to api.anthropic.com after a few minutes of idle.
+COPY docker/disable-undici-h2.cjs /usr/local/lib/disable-undici-h2.cjs
+
 ENV NODE_PATH=/usr/local/lib/node_modules
+ENV NODE_OPTIONS="--require=/usr/local/lib/disable-undici-h2.cjs"
 
 WORKDIR /workspace
