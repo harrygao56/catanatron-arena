@@ -11,18 +11,27 @@ export function AgentTrace({ decision, loading }: Props) {
     return <div style={{ padding: 12, opacity: 0.6 }}>Loading decision…</div>;
   if (!decision) return null;
 
-  const agent = decision.agent ?? null;
-  const isLLM = !!agent && (agent.events || agent.agent_events || agent.prompt);
+  const attempts = collectAttempts(decision.agent ?? null);
 
   return (
     <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 12 }}>
       <Header decision={decision} />
-      {isLLM ? (
-        <LLMTrace agent={agent!} />
-      ) : (
+      {attempts.length === 0 ? (
         <div style={{ opacity: 0.6, fontSize: 13 }}>
           {decision.rationale ?? "Non-LLM agent (no trace)."}
         </div>
+      ) : attempts.length === 1 ? (
+        <LLMTrace agent={attempts[0].payload} />
+      ) : (
+        attempts.map(({ label, payload }) => (
+          <Collapsible
+            key={label}
+            title={`Attempt ${label}`}
+            defaultOpen={label === attempts[attempts.length - 1].label}
+          >
+            <LLMTrace agent={payload} />
+          </Collapsible>
+        ))
       )}
       <Collapsible title="Legal actions" defaultOpen={false}>
         <pre style={preStyle}>
@@ -34,12 +43,30 @@ export function AgentTrace({ decision, loading }: Props) {
           {JSON.stringify(decision.observation ?? {}, null, 2)}
         </pre>
       </Collapsible>
-      {agent?.prompt != null && (
-        <Collapsible title="Prompt" defaultOpen={false}>
-          <pre style={preStyle}>{String(agent.prompt)}</pre>
-        </Collapsible>
-      )}
     </div>
+  );
+}
+
+function collectAttempts(
+  agent: AgentPayload | Record<string, AgentPayload> | null,
+): Array<{ label: string; payload: AgentPayload }> {
+  if (!agent) return [];
+  if (isAgentPayload(agent)) {
+    return [{ label: "1", payload: agent }];
+  }
+  return Object.entries(agent)
+    .filter(([, v]) => v && isAgentPayload(v as AgentPayload))
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([label, payload]) => ({ label, payload: payload as AgentPayload }));
+}
+
+function isAgentPayload(value: object): value is AgentPayload {
+  return (
+    "events" in value ||
+    "agent_events" in value ||
+    "prompt" in value ||
+    "choice" in value ||
+    "outcome" in value
   );
 }
 
@@ -113,6 +140,18 @@ function LLMTrace({ agent }: { agent: AgentPayload }) {
             </div>
           ))}
         </Section>
+      )}
+      {agent.outcome?.error && (
+        <Section title="Outcome">
+          <div style={{ color: "#e07a5f" }}>
+            {agent.outcome.status}: {agent.outcome.error}
+          </div>
+        </Section>
+      )}
+      {agent.prompt != null && (
+        <Collapsible title="Prompt" defaultOpen={false}>
+          <pre style={preStyle}>{String(agent.prompt)}</pre>
+        </Collapsible>
       )}
       <Collapsible title={`Raw events (${events.length})`} defaultOpen={false}>
         <pre style={preStyle}>{JSON.stringify(events, null, 2)}</pre>

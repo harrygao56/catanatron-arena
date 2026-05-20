@@ -122,7 +122,7 @@ export interface DecisionDetail extends TimelineItem {
     rationale: string | null;
   };
   rationale?: string | null;
-  agent?: AgentPayload | null;
+  agent?: AgentPayload | Record<string, AgentPayload> | null;
 }
 
 export interface AgentPayload {
