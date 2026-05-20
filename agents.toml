@@ -1,0 +1,5 @@
+[agents.sonnet]
+provider = "openrouter"
+model = "anthropic/claude-sonnet-4.6"
+move_timeout_seconds = 120
+max_invalid_retries = 5

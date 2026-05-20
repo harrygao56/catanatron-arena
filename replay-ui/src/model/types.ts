@@ -129,6 +129,7 @@ export interface AgentPayload {
   prompt?: string | null;
   choice?: { action_id: number; rationale?: string | null } | null;
   outcome?: { status: string; elapsed_seconds?: number; error?: string | null } | null;
+  events?: AgentEvent[] | null;
   agent_events?: AgentEvent[] | null;
 }
 

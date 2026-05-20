@@ -12,7 +12,7 @@ export function AgentTrace({ decision, loading }: Props) {
   if (!decision) return null;
 
   const agent = decision.agent ?? null;
-  const isLLM = !!agent && (agent.agent_events || agent.prompt);
+  const isLLM = !!agent && (agent.events || agent.agent_events || agent.prompt);
 
   return (
     <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 12 }}>
@@ -63,7 +63,7 @@ function Header({ decision }: { decision: DecisionDetail }) {
 }
 
 function LLMTrace({ agent }: { agent: AgentPayload }) {
-  const events = (agent.agent_events ?? []) as AgentEvent[];
+  const events = (agent.events ?? agent.agent_events ?? []) as AgentEvent[];
   const choice = agent.choice ?? null;
   const thinking = collectThinking(events);
   const toolCalls = collectToolCalls(events);
@@ -162,25 +162,52 @@ interface ToolCall {
 
 function collectToolCalls(events: AgentEvent[]): ToolCall[] {
   const calls = new Map<string, ToolCall>();
+
+  const upsert = (id: string, patch: Partial<ToolCall>) => {
+    const existing = calls.get(id);
+    if (existing) {
+      Object.assign(existing, patch);
+    } else {
+      calls.set(id, { id, name: "tool", input: undefined, ...patch });
+    }
+  };
+
   for (const e of events) {
+    // Pi RPC events: tool_execution_start / tool_execution_end carry the
+    // resolved tool call directly.
+    const obj = e as Record<string, unknown>;
+    if (obj.type === "tool_execution_start") {
+      const id = String(obj.toolCallId ?? calls.size);
+      upsert(id, {
+        name: (obj.toolName as string) ?? "tool",
+        input: obj.args,
+      });
+      continue;
+    }
+    if (obj.type === "tool_execution_end") {
+      const id = String(obj.toolCallId ?? "");
+      if (id) upsert(id, { result: obj.result });
+      continue;
+    }
+
+    // Anthropic-style inline tool_use / tool_result content blocks.
     const content = e.message?.content;
     if (!Array.isArray(content)) continue;
     for (const c of content) {
       if (!c || typeof c !== "object") continue;
-      const obj = c as Record<string, unknown>;
-      if (obj.type === "tool_use") {
-        const id = (obj.id as string) ?? String(calls.size);
+      const block = c as Record<string, unknown>;
+      const type = block.type;
+      if (type === "tool_use" || type === "toolCall") {
+        const id = String(block.id ?? block.toolCallId ?? calls.size);
         if (!calls.has(id)) {
-          calls.set(id, {
-            id,
-            name: (obj.name as string) ?? "tool",
-            input: obj.input,
+          upsert(id, {
+            name: (block.name as string) ?? (block.toolName as string) ?? "tool",
+            input: block.input ?? block.arguments,
           });
         }
-      } else if (obj.type === "tool_result") {
-        const id = (obj.tool_use_id as string) ?? "";
-        const existing = calls.get(id);
-        if (existing) existing.result = obj.content;
+      } else if (type === "tool_result") {
+        const id = String(block.tool_use_id ?? "");
+        if (id) upsert(id, { result: block.content });
       }
     }
   }
